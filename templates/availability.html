@@ -51,8 +51,7 @@
           {% set stay_label = max_run ~ ' ' ~ nights_label %}
           {% set display_run = max_run %}
         {% endif %}
-        {% set count_label = display_count ~ ('+' if site_count > threshold else '') %}
-        {% set tooltip_html = '<strong>Open Pads:</strong> ' ~ count_label ~ '<br><strong>Max consecutive stay:</strong> ' ~ stay_label %}
+        {% set tooltip_html = '<strong>Open Pads:</strong> ' ~ display_count ~ '<br><strong>Max consecutive stay:</strong> ' ~ stay_label %}
         <td class="free availability-tooltip"
             data-bs-toggle="tooltip"
             data-bs-html="true"
