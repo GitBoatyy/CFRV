@@ -295,8 +295,11 @@ def run_optimizer_internal():
                 hi = mid
         return lo
 
+    site_priority = {sid: idx for idx, (sid, _name) in enumerate(site_rows)}
+
     unlocked.sort(key=lambda r: (
         r["arrival"],
+        site_priority.get(r["current_site"], 999),
         -(r["departure"] - r["arrival"]).days,
         r["departure"],
         r["id"],
