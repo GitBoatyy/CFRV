@@ -299,8 +299,8 @@ def run_optimizer_internal():
 
     unlocked.sort(key=lambda r: (
         r["arrival"],
+        -((r["departure"] - r["arrival"]).days),
         site_priority.get(r["current_site"], 999),
-        -(r["departure"] - r["arrival"]).days,
         r["departure"],
         r["id"],
     ))
@@ -310,6 +310,7 @@ def run_optimizer_internal():
     for res in unlocked:
         arrival = res["arrival"]
         departure = res["departure"]
+        stay_length = max((departure - arrival).days, 1)
 
         best_choice = None
         best_score = None
@@ -328,7 +329,9 @@ def run_optimizer_internal():
             prev_gap = (arrival - prev_interval["departure"]).days if prev_interval else 10 ** 6
             next_gap = (next_interval["arrival"] - departure).days if next_interval else 10 ** 6
             same_site = 0 if sid == res["current_site"] else 1
-            score = (prev_gap, same_site, next_gap, sid)
+            category = site_priority.get(sid, 999)
+            category_penalty = category * stay_length
+            score = (prev_gap, same_site, category_penalty, next_gap, category, sid)
 
             if best_score is None or score < best_score:
                 best_score = score
