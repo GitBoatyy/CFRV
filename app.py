@@ -7,6 +7,9 @@ app = Flask(__name__)
 app.secret_key = "supersecretkey"
 DB = "db.sqlite3"
 
+MAX_AVAIL_DISPLAY_DAYS = 14
+MAX_AVAIL_LOOKAHEAD_DAYS = 60
+
 # default list of sites to seed into a fresh database
 DEFAULT_SITES = [
     *(f"Site {i}" for i in range(1, 11)),
@@ -163,6 +166,18 @@ def find_available_site(start_iso, end_iso):
         if is_available(sid, start_iso, end_iso):
             return sid
     return None
+
+
+def consecutive_free_nights(site_id, start_date, limit=MAX_AVAIL_LOOKAHEAD_DAYS):
+    day = start_date
+    nights = 0
+    while nights < limit:
+        next_day = day + timedelta(days=1)
+        if not is_available(site_id, day.isoformat(), next_day.isoformat()):
+            break
+        nights += 1
+        day = next_day
+    return nights
 
 
 def range_requires_split(start_iso, end_iso):
@@ -421,20 +436,18 @@ def availability():
 
     group_definitions = [
         ("Full Hookup", full_hookup_ids, len(full_hookup_ids)),
-        ("Power / Water", power_water_ids, 2),
+        ("Power / Water", power_water_ids, 3),
     ]
 
     def max_contiguous_free(start_idx, group_site_ids):
+        start_date = days[start_idx]
         longest = 0
         for sid in group_site_ids:
             statuses = site_status_map.get(sid, [])
-            run = 0
-            idx = start_idx
-            while idx < total_days and idx < len(statuses) and statuses[idx] == "free":
-                run += 1
-                idx += 1
-            if run > longest:
-                longest = run
+            if start_idx < len(statuses) and statuses[start_idx] == "free":
+                run = consecutive_free_nights(sid, start_date, MAX_AVAIL_LOOKAHEAD_DAYS)
+                if run > longest:
+                    longest = run
         return longest
 
     def free_site_count(day_idx, group_site_ids):
@@ -462,12 +475,16 @@ def availability():
             site_count = free_site_count(day_index, group_site_ids)
             available_names = [site_lookup.get(sid, f"Site {sid}") for sid in group_site_ids
                                if site_status_map.get(sid, ["free"] * total_days)[day_index] == "free"]
+            actual_run = max_contiguous_free(day_index, group_site_ids) if aggregate == "free" else 0
+            display_run = min(actual_run, MAX_AVAIL_DISPLAY_DAYS)
             row.append({
                 "state": aggregate,
-                "max_run": max_contiguous_free(day_index, group_site_ids),
+                "max_run": display_run,
+                "actual_run": actual_run,
                 "free_sites": site_count,
                 "available_names": available_names,
-                "is_full": aggregate == "free" and site_count >= full_threshold
+                "is_full": aggregate == "free" and site_count >= full_threshold,
+                "capped": aggregate == "free" and actual_run > MAX_AVAIL_DISPLAY_DAYS
             })
         group_rows.append({
             "name": name,

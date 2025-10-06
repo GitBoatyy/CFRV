@@ -39,19 +39,27 @@
         <td class="status-tentative"></td>
       {% else %}
         {% set max_run = cell.max_run %}
+        {% set actual_run = cell.actual_run %}
         {% set site_count = cell.free_sites %}
         {% set names = cell.available_names %}
-        {% set nights_label = 'night' if max_run == 1 else 'nights' %}
-        {% set tooltip_html = '<strong>Available Sites:</strong> ' ~ (names|join(', ') if names else 'None') ~ '<br><strong>Max consecutive stay:</strong> ' ~ max_run ~ ' ' ~ nights_label %}
+        {% if cell.capped %}
+          {% set stay_label = 'More than 14 nights' %}
+          {% set display_run = '>14' %}
+        {% else %}
+          {% set nights_label = 'night' if max_run == 1 else 'nights' %}
+          {% set stay_label = max_run ~ ' ' ~ nights_label %}
+          {% set display_run = max_run %}
+        {% endif %}
+        {% set tooltip_html = '<strong>Available Sites:</strong> ' ~ (names|join(', ') if names else 'None') ~ '<br><strong>Max consecutive stay:</strong> ' ~ stay_label %}
         <td class="free availability-tooltip"
             data-bs-toggle="tooltip"
             data-bs-html="true"
             data-bs-placement="top"
             title="{{ tooltip_html }}">
           {% if cell.is_full %}
-            <span class="avail-hint">Full availability ({{ max_run }}d)</span>
+            <span class="avail-hint">Full availability ({{ display_run }}d)</span>
           {% else %}
-            <span class="avail-hint">{{ site_count }} / {{ max_run }}d</span>
+            <span class="avail-hint">{{ site_count }} / {{ display_run }}d</span>
           {% endif %}
         </td>
       {% endif %}
