@@ -405,16 +405,24 @@ def optimize_reservations():
     if not reservations:
         return jsonify({"ok": True, "moved": 0})
 
+    # Process by arrival while preferring longer stays first to reduce fragmentation
+    reservations.sort(key=lambda r: (
+        r["arrival"],
+        -(r["departure"] - r["arrival"]).days,
+        r["departure"],
+        r["id"],
+    ))
+
     site_available = {sid: date.min for sid in site_ids}
     moves = []
 
     for res in reservations:
-        ordered_sites = sorted(site_ids, key=lambda sid: (site_available[sid], sid))
-        target_site = None
-        for sid in ordered_sites:
-            if site_available[sid] <= res["arrival"]:
-                target_site = sid
-                break
+        candidates = [sid for sid in site_ids if site_available[sid] <= res["arrival"]]
+        if candidates:
+            # choose the site whose availability is closest to the arrival (best fit)
+            target_site = max(candidates, key=lambda sid: (site_available[sid], -sid))
+        else:
+            target_site = None
         if target_site is None:
             return jsonify({
                 "ok": False,
