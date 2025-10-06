@@ -179,18 +179,6 @@ def find_available_site(start_iso, end_iso):
     return None
 
 
-def consecutive_free_nights(site_id, start_date, limit=MAX_AVAIL_LOOKAHEAD_DAYS):
-    day = start_date
-    nights = 0
-    while nights < limit:
-        next_day = day + timedelta(days=1)
-        if not is_available(site_id, day.isoformat(), next_day.isoformat()):
-            break
-        nights += 1
-        day = next_day
-    return nights
-
-
 def range_requires_split(start_iso, end_iso):
     site_rows = get_site_rows()
     if not site_rows:
@@ -411,22 +399,31 @@ def availability():
     sites = query_db("SELECT id,name FROM sites ORDER BY CASE WHEN name LIKE 'Site %' THEN CAST(substr(name,6) AS INTEGER) ELSE 9999 END, name")
     reservations = query_db("SELECT site_id, arrival_date, departure_date, status FROM reservations")
 
+    reservations_by_site = {}
+    for sid, arrival, departure, status in reservations:
+        try:
+            arr_d = parse_d(arrival)
+            dep_d = parse_d(departure)
+        except ValueError:
+            continue
+        reservations_by_site.setdefault(sid, []).append((arr_d, dep_d, (status or "").lower()))
+
+    for sid in reservations_by_site:
+        reservations_by_site[sid].sort(key=lambda x: x[0])
+
     total_days = len(days)
     site_status_map = {}
     for sid, _sname in sites:
         row = []
+        site_res = reservations_by_site.get(sid, [])
         for d in days:
             cell_state = "free"
-            for r in reservations:
-                if r[0] != sid:
-                    continue
-                if r[1] <= d.isoformat() < r[2]:
-                    status = (r[3] or "").lower()
-                    if status == "confirmed":
-                        cell_state = "confirmed"
-                        break
-                    elif cell_state != "confirmed":
-                        cell_state = "tentative"
+            for arr_d, dep_d, status in site_res:
+                if arr_d <= d < dep_d:
+                    cell_state = "confirmed" if status == "confirmed" else "tentative"
+                    break
+                if arr_d > d:
+                    break
             row.append(cell_state)
         site_status_map[sid] = row
 
@@ -450,13 +447,24 @@ def availability():
         ("Power / Water", power_water_ids, 3),
     ]
 
+    def free_run_from(site_id, start_date):
+        upcoming = reservations_by_site.get(site_id, [])
+        for arr_d, dep_d, _status in upcoming:
+            if dep_d <= start_date:
+                continue
+            if arr_d <= start_date:
+                return 0
+            gap = (arr_d - start_date).days
+            return min(gap, MAX_AVAIL_LOOKAHEAD_DAYS)
+        return MAX_AVAIL_LOOKAHEAD_DAYS
+
     def max_contiguous_free(start_idx, group_site_ids):
         start_date = days[start_idx]
         longest = 0
         for sid in group_site_ids:
             statuses = site_status_map.get(sid, [])
             if start_idx < len(statuses) and statuses[start_idx] == "free":
-                run = consecutive_free_nights(sid, start_date, MAX_AVAIL_LOOKAHEAD_DAYS)
+                run = free_run_from(sid, start_date)
                 if run > longest:
                     longest = run
         return longest
