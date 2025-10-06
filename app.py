@@ -124,6 +124,17 @@ def to_bool(value):
         return value.strip().lower() in {"1", "true", "yes", "on"}
     return bool(value)
 
+
+def short_site_label(name: str) -> str:
+    if name.startswith("Site "):
+        return name.split(" ", 1)[1]
+    if name.startswith("Dahlia "):
+        parts = name.split()
+        if len(parts) > 1:
+            return f"Dahlia {parts[1][0]}"
+        return "Dahlia"
+    return name
+
 def build_row_cells(days, site_res_list):
     res = []
     for r in site_res_list:
@@ -204,7 +215,7 @@ def range_requires_split(start_iso, end_iso):
 
 def auto_assign_site(start_iso, end_iso):
     site_rows = get_site_rows()
-    site_lookup = {sid: name for sid, name in site_rows}
+    site_lookup = {sid: short_site_label(name) for sid, name in site_rows}
     warnings = []
 
     site_id = find_available_site(start_iso, end_iso)
@@ -530,6 +541,7 @@ def dashboard():
     days = [date(year, month, d) for d in range(1, num_days + 1)]
 
     sites = query_db("SELECT id,name FROM sites ORDER BY CASE WHEN name LIKE 'Site %' THEN CAST(substr(name,6) AS INTEGER) ELSE 9999 END, name")
+    site_display = {sid: short_site_label(name) for sid, name in sites}
     start, end = days[0].isoformat(), days[-1].isoformat()
 
     reservations = query_db("""
@@ -570,6 +582,7 @@ def dashboard():
         year=year,
         month=month,
         month_name=calendar.month_name[month],
+        site_display=site_display,
         prev_year=prev_year,
         prev_month=prev_month,
         next_year=next_year,
@@ -671,7 +684,7 @@ def update_reservation():
         if not is_available(site_id, start, end, exclude_res_id=res_id):
             return jsonify({"ok": False, "error": "Site not available for requested dates"})
         if moved:
-            site_lookup = {sid: name for sid, name in get_site_rows()}
+            site_lookup = {sid: short_site_label(name) for sid, name in get_site_rows()}
             warnings.append(f"Optimizer moved {moved} reservation(s) to free {site_lookup.get(site_id, f'Site {site_id}')}.")
 
     site_locked = 1 if to_bool(data.get("site_locked")) else 0
@@ -781,14 +794,7 @@ def export_reservations():
 
     sites = query_db("SELECT id,name FROM sites ORDER BY CASE WHEN name LIKE 'Site %' THEN CAST(substr(name,6) AS INTEGER) ELSE 9999 END, name")
     site_lookup = {sid: name for sid, name in sites}
-    site_short_lookup = {}
-    for sid, name in sites:
-        if name.startswith("Dahlia "):
-            parts = name.split()
-            abbrev = f"{parts[0]} {parts[1][0]}" if len(parts) > 1 else "Dahlia"
-            site_short_lookup[sid] = abbrev
-        else:
-            site_short_lookup[sid] = name
+    site_short_lookup = {sid: short_site_label(name) for sid, name in sites}
     sections = []
 
     def collect_month_data(yy, mm):
