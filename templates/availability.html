@@ -32,6 +32,7 @@
   <tr>
     <td class="fw-bold">{{ group.name }}</td>
     {% for cell in group.cells %}
+      {% set threshold = group.threshold %}
       {% set state = cell.state %}
       {% if state == 'confirmed' %}
         <td class="status-confirmed">&nbsp;</td>
@@ -41,6 +42,7 @@
         {% set max_run = cell.max_run %}
         {% set actual_run = cell.actual_run %}
         {% set site_count = cell.free_sites %}
+        {% set display_count = site_count if site_count <= threshold else threshold %}
         {% if cell.capped %}
           {% set stay_label = 'More than 14 nights' %}
           {% set display_run = '>14' %}
@@ -49,7 +51,8 @@
           {% set stay_label = max_run ~ ' ' ~ nights_label %}
           {% set display_run = max_run %}
         {% endif %}
-        {% set tooltip_html = '<strong>Open Pads:</strong> ' ~ site_count ~ '<br><strong>Max consecutive stay:</strong> ' ~ stay_label %}
+        {% set count_label = display_count ~ ('+' if site_count > threshold else '') %}
+        {% set tooltip_html = '<strong>Open Pads:</strong> ' ~ count_label ~ '<br><strong>Max consecutive stay:</strong> ' ~ stay_label %}
         <td class="free availability-tooltip"
             data-bs-toggle="tooltip"
             data-bs-html="true"
@@ -93,6 +96,12 @@ document.addEventListener('DOMContentLoaded', () => {
 .availability-table {
   table-layout: fixed;
   width: 100%;
+}
+.availability-table th:first-child,
+.availability-table td:first-child {
+  width: 160px;
+  max-width: 160px;
+  white-space: normal;
 }
 .availability-table td {
   max-width: 45px;

@@ -504,7 +504,8 @@ def availability():
             })
         group_rows.append({
             "name": name,
-            "cells": row
+            "cells": row,
+            "threshold": full_threshold
         })
 
     prev_y, prev_m = (year - 1, 12) if month == 1 else (year, month - 1)
