@@ -444,7 +444,7 @@ def availability():
 
     group_definitions = [
         ("Full Hookup", full_hookup_ids, len(full_hookup_ids)),
-        ("Power / Water", power_water_ids, 3),
+        ("Power / Water", power_water_ids, 2),
     ]
 
     def free_run_from(site_id, start_date):
