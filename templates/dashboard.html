@@ -36,6 +36,12 @@
       width: auto;
     }
   }
+  .dashboard-toolbar .dashboard-filter .date-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 200px;
+  }
   .dashboard-toolbar .actions {
     display: flex;
     flex-wrap: wrap;
@@ -62,7 +68,7 @@
     <button id="nextBtn" type="button" class="btn btn-outline-secondary" onclick="goNext()">Next ›</button>
   </div>
 
-  <form id="viewForm" class="dashboard-filter" method="get" action="{{ url_for('dashboard') }}">
+  <form id="viewForm" class="dashboard-filter {% if weekly_mode %}weekly-active{% endif %}" method="get" action="{{ url_for('dashboard') }}">
     <input type="hidden" name="scope" id="scopeField" value="{{ 'week' if weekly_mode else 'month' }}">
 
     <div class="switch-wrap">
@@ -71,28 +77,26 @@
         <label class="form-check-label" for="weeklyToggle">Weekly view</label>
       </div>
     </div>
+    <div class="date-wrap">
+      <div class="month-wrap">
+        <input type="month" class="form-control" id="monthInput" name="month" value="{{ month_value }}" required>
+      </div>
 
-    <div class="month-wrap">
-      <input type="month" class="form-control" id="monthInput" name="month" value="{{ month_value }}" required>
-    </div>
-
-    <div class="week-wrap {{ 'stacked' if weekly_mode else '' }}">
-      <div id="weekPicker" class="{{ '' if weekly_mode else 'd-none' }}">
-        <select class="form-select" id="weekSelect" name="start" {% if not weekly_mode %}disabled{% endif %}>
-          {% if week_options %}
-            {% for opt in week_options %}
-              <option value="{{ opt.value }}" {% if selected_week_start == opt.value %}selected{% endif %}>{{ opt.label }} ({{ opt.range }})</option>
-            {% endfor %}
-          {% else %}
-            <option value="" disabled selected>No weeks available</option>
-          {% endif %}
-        </select>
+      <div class="week-wrap {{ 'stacked' if weekly_mode else '' }}">
+        <div id="weekPicker" class="{{ '' if weekly_mode else 'd-none' }}">
+          <select class="form-select" id="weekSelect" name="start" {% if not weekly_mode %}disabled{% endif %}>
+            {% if week_options %}
+              {% for opt in week_options %}
+                <option value="{{ opt.value }}" {% if selected_week_start == opt.value %}selected{% endif %}>{{ opt.label }} ({{ opt.range }})</option>
+              {% endfor %}
+            {% else %}
+              <option value="" disabled selected>No weeks available</option>
+            {% endif %}
+          </select>
+        </div>
       </div>
     </div>
 
-    <div class="submit-wrap">
-      <button type="submit" class="btn btn-outline-primary w-100">Load</button>
-    </div>
   </form>
 
   <div class="actions">
