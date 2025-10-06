@@ -484,8 +484,6 @@ def availability():
             else:
                 aggregate = "confirmed"
             site_count = free_site_count(day_index, group_site_ids)
-            available_names = [site_lookup.get(sid, f"Site {sid}") for sid in group_site_ids
-                               if site_status_map.get(sid, ["free"] * total_days)[day_index] == "free"]
             actual_run = max_contiguous_free(day_index, group_site_ids) if aggregate == "free" else 0
             display_run = min(actual_run, MAX_AVAIL_DISPLAY_DAYS)
             row.append({
@@ -493,7 +491,6 @@ def availability():
                 "max_run": display_run,
                 "actual_run": actual_run,
                 "free_sites": site_count,
-                "available_names": available_names,
                 "is_full": aggregate == "free" and site_count >= full_threshold,
                 "capped": aggregate == "free" and actual_run > MAX_AVAIL_DISPLAY_DAYS
             })

@@ -41,7 +41,6 @@
         {% set max_run = cell.max_run %}
         {% set actual_run = cell.actual_run %}
         {% set site_count = cell.free_sites %}
-        {% set names = cell.available_names %}
         {% if cell.capped %}
           {% set stay_label = 'More than 14 nights' %}
           {% set display_run = '>14' %}
@@ -50,7 +49,7 @@
           {% set stay_label = max_run ~ ' ' ~ nights_label %}
           {% set display_run = max_run %}
         {% endif %}
-        {% set tooltip_html = '<strong>Available Sites:</strong> ' ~ (names|join(', ') if names else 'None') ~ '<br><strong>Max consecutive stay:</strong> ' ~ stay_label %}
+        {% set tooltip_html = '<strong>Open Pads:</strong> ' ~ site_count ~ '<br><strong>Max consecutive stay:</strong> ' ~ stay_label %}
         <td class="free availability-tooltip"
             data-bs-toggle="tooltip"
             data-bs-html="true"
