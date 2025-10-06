@@ -420,8 +420,8 @@ def availability():
             power_water_ids.append(sid)
 
     group_definitions = [
-        ("Full Hookup", full_hookup_ids),
-        ("Power / Water", power_water_ids),
+        ("Full Hookup", full_hookup_ids, len(full_hookup_ids)),
+        ("Power / Water", power_water_ids, 2),
     ]
 
     def max_contiguous_free(start_idx, group_site_ids):
@@ -446,7 +446,7 @@ def availability():
         return count
 
     group_rows = []
-    for name, group_site_ids in group_definitions:
+    for name, group_site_ids, full_threshold in group_definitions:
         row = []
         for day_index in range(total_days):
             states = [site_status_map.get(sid, ["free"] * total_days)[day_index] for sid in group_site_ids]
@@ -459,13 +459,15 @@ def availability():
                 aggregate = "tentative"
             else:
                 aggregate = "confirmed"
+            site_count = free_site_count(day_index, group_site_ids)
             available_names = [site_lookup.get(sid, f"Site {sid}") for sid in group_site_ids
                                if site_status_map.get(sid, ["free"] * total_days)[day_index] == "free"]
             row.append({
                 "state": aggregate,
                 "max_run": max_contiguous_free(day_index, group_site_ids),
-                "free_sites": free_site_count(day_index, group_site_ids),
-                "available_names": available_names
+                "free_sites": site_count,
+                "available_names": available_names,
+                "is_full": aggregate == "free" and site_count >= full_threshold
             })
         group_rows.append({
             "name": name,

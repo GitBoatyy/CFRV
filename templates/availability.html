@@ -48,7 +48,11 @@
             data-bs-html="true"
             data-bs-placement="top"
             title="{{ tooltip_html }}">
-          <span class="avail-hint">{{ site_count }} / {{ max_run }}d</span>
+          {% if cell.is_full %}
+            <span class="avail-hint">Full availability ({{ max_run }}d)</span>
+          {% else %}
+            <span class="avail-hint">{{ site_count }} / {{ max_run }}d</span>
+          {% endif %}
         </td>
       {% endif %}
     {% endfor %}
