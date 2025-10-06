@@ -229,7 +229,7 @@ def auto_assign_site(start_iso, end_iso):
 
 
 def run_optimizer_internal():
-    site_rows = query_db("SELECT id FROM sites ORDER BY id ASC")
+    site_rows = query_db("SELECT id,name FROM sites ORDER BY CASE WHEN name LIKE 'Site %' THEN CAST(substr(name,6) AS INTEGER) ELSE 9999 END, name")
     site_ids = [row[0] for row in site_rows]
     if not site_ids:
         return False, 0, "No sites configured"
