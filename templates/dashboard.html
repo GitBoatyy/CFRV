@@ -62,10 +62,7 @@
                 data-res-id="{{ cell.res.id }}"
                 data-locked="{{ 1 if cell.res.site_locked else 0 }}"
                 data-res='{{ cell.res|tojson|escape }}'
-                data-bs-toggle="tooltip"
-                data-bs-html="true"
-                data-bs-delay='{"show":1000,"hide":100}'
-                title="{{ tooltip_html }}"
+                data-tooltip="{{ tooltip_html }}"
                 onclick="showRes(JSON.parse(this.getAttribute('data-res')))">
               <div class="guest-label">{{ cell.res.guest.rsplit(" ", 1)[-1] }}{% if cell.res.site_locked %} [L]{% endif %}</div>
               <div class="res-tags">
@@ -143,6 +140,28 @@ window.addEventListener('DOMContentLoaded', () => {
 /* ===== Existing dashboard logic ===== */
 let currentRes = null;
 let editMode = false;
+let tooltipInstances = [];
+
+function refreshTooltips(){
+  tooltipInstances.forEach(instance => instance.dispose());
+  tooltipInstances = [];
+  const cells = document.querySelectorAll('.res-block[data-tooltip]');
+  cells.forEach(el => {
+    el.removeAttribute('data-bs-toggle');
+    el.removeAttribute('title');
+    el.removeAttribute('data-bs-html');
+    el.removeAttribute('data-bs-delay');
+  });
+  if(editMode) return;
+  cells.forEach(el => {
+    const content = el.getAttribute('data-tooltip') || '';
+    el.setAttribute('title', content);
+    el.setAttribute('data-bs-toggle', 'tooltip');
+    el.setAttribute('data-bs-html', 'true');
+    el.setAttribute('data-bs-delay', '{"show":1000,"hide":100}');
+    tooltipInstances.push(new bootstrap.Tooltip(el));
+  });
+}
 
 function toggleEditMode(){
   editMode = !editMode;
@@ -162,6 +181,7 @@ function toggleEditMode(){
     else{ td.removeEventListener("dragstart", dragStart); }
   });
   document.querySelector("table").classList.toggle("edit-active", editMode);
+  refreshTooltips();
 }
 
 let dragDuration = 0;
@@ -541,8 +561,7 @@ async function deleteRes(id){
 
 window.addEventListener("DOMContentLoaded", ()=>{
   if(localStorage.getItem("editMode")==="1"){ editMode = false; toggleEditMode(); }
-  const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-  tooltipTriggerList.forEach(el => new bootstrap.Tooltip(el));
+  refreshTooltips();
 });
 </script>
 
