@@ -38,8 +38,17 @@
       {% elif state == 'tentative' %}
         <td class="status-tentative"></td>
       {% else %}
-        <td class="free" title="Max contiguous nights: {{ cell.max_run }}, available sites: {{ cell.free_sites }}">
-          <span class="avail-hint">{{ cell.free_sites }} / {{ cell.max_run }}d</span>
+        {% set max_run = cell.max_run %}
+        {% set site_count = cell.free_sites %}
+        {% set names = cell.available_names %}
+        {% set nights_label = 'night' if max_run == 1 else 'nights' %}
+        {% set tooltip_html = '<strong>Available Sites:</strong> ' ~ (names|join(', ') if names else 'None') ~ '<br><strong>Max consecutive stay:</strong> ' ~ max_run ~ ' ' ~ nights_label %}
+        <td class="free availability-tooltip"
+            data-bs-toggle="tooltip"
+            data-bs-html="true"
+            data-bs-placement="top"
+            title="{{ tooltip_html }}">
+          <span class="avail-hint">{{ site_count }} / {{ max_run }}d</span>
         </td>
       {% endif %}
     {% endfor %}
@@ -57,6 +66,11 @@ function jumpToMonth(val){
   let y = parts[0], m = parts[1];
   window.location = "?year="+y+"&month="+parseInt(m);
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+  tooltipTriggerList.forEach(el => new bootstrap.Tooltip(el));
+});
 </script>
 
 <style>

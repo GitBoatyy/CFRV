@@ -404,6 +404,8 @@ def availability():
             row.append(cell_state)
         site_status_map[sid] = row
 
+    site_lookup = {sid: name for sid, name in sites}
+
     full_hookup_ids, power_water_ids = [], []
     for sid, name in sites:
         site_num = None
@@ -457,10 +459,13 @@ def availability():
                 aggregate = "tentative"
             else:
                 aggregate = "confirmed"
+            available_names = [site_lookup.get(sid, f"Site {sid}") for sid in group_site_ids
+                               if site_status_map.get(sid, ["free"] * total_days)[day_index] == "free"]
             row.append({
                 "state": aggregate,
                 "max_run": max_contiguous_free(day_index, group_site_ids),
-                "free_sites": free_site_count(day_index, group_site_ids)
+                "free_sites": free_site_count(day_index, group_site_ids),
+                "available_names": available_names
             })
         group_rows.append({
             "name": name,
