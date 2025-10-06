@@ -47,6 +47,13 @@
             {% set short_cell = cell.span < 3 %}
             {% set status_abbrev = 'C' if status == 'confirmed' else ('T' if status == 'tentative' else '?') %}
             {% set paid_abbrev = 'P' if paid == 'yes' else 'U' %}
+            {% set tooltip_html = '<div class=\'text-start\'><strong>' ~ cell.res.guest ~ '</strong><br>' ~ cell.res.arrival ~ ' → ' ~ cell.res.departure %}
+            {% set tooltip_html = tooltip_html ~ '<br>Site: ' ~ cell.res.site_id %}
+            {% if cell.res.phone %}{% set tooltip_html = tooltip_html ~ '<br>Phone: ' ~ cell.res.phone %}{% endif %}
+            {% if cell.res.email %}{% set tooltip_html = tooltip_html ~ '<br>Email: ' ~ cell.res.email %}{% endif %}
+            {% set tooltip_html = tooltip_html ~ '<br>Status: ' ~ (cell.res.status or 'n/a') ~ '<br>Paid: ' ~ (cell.res.paid or 'no') %}
+            {% if cell.res.notes %}{% set tooltip_html = tooltip_html ~ '<br>Notes: ' ~ cell.res.notes %}{% endif %}
+            {% set tooltip_html = tooltip_html ~ '</div>' %}
             <td class="res-block status-{{ status if status else 'unknown' }} paid-{{ 'yes' if paid == 'yes' else 'no' }}{% if short_cell %} short-cell{% endif %}"
                 colspan="{{ cell.span }}"
                 draggable="false"
@@ -55,6 +62,10 @@
                 data-res-id="{{ cell.res.id }}"
                 data-locked="{{ 1 if cell.res.site_locked else 0 }}"
                 data-res='{{ cell.res|tojson|escape }}'
+                data-bs-toggle="tooltip"
+                data-bs-html="true"
+                data-bs-delay='{"show":1000,"hide":100}'
+                title="{{ tooltip_html }}"
                 onclick="showRes(JSON.parse(this.getAttribute('data-res')))">
               <div class="guest-label">{{ cell.res.guest.rsplit(" ", 1)[-1] }}{% if cell.res.site_locked %} [L]{% endif %}</div>
               <div class="res-tags">
@@ -530,6 +541,8 @@ async function deleteRes(id){
 
 window.addEventListener("DOMContentLoaded", ()=>{
   if(localStorage.getItem("editMode")==="1"){ editMode = false; toggleEditMode(); }
+  const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+  tooltipTriggerList.forEach(el => new bootstrap.Tooltip(el));
 });
 </script>
 
