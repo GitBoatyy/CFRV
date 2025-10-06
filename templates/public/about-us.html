@@ -1,0 +1,56 @@
+{% extends 'public/base.html' %}
+{% block title %}About Us – Canyon Farms RV Park{% endblock %}
+{% block content %}
+<section class="background3 py-5">
+  <div class="container-xl">
+    <h1 class="bannertitle2 text-center mb-2">Welcome to Canyon Farms</h1>
+    <p class="bannerdescription text-center mb-5">Meet your hosts</p>
+
+    <div class="picturestatement flex-column flex-lg-row">
+      <img src="{{ url_for('static', filename='public/images/owners.jpg') }}" alt="Owners" class="img-fluid shadow-lg rounded mb-4 mb-lg-0">
+      <div class="statement">
+        <p class="st1">We invite you to visit us for a truly unique travel adventure at our agri-tourism farm located in beautiful Kelowna, British Columbia. It is our simple desire to provide you with a vacation experience unlike any other.</p>
+        <p>Canyon Farms is a small farm tucked away on the ridge of rural East Kelowna. Come and experience true country life… enjoy our free-range eggs and poultry, fresh vegetables, berries and fruits. Stroll amongst our stunning collection of Dahlias.</p>
+      </div>
+    </div>
+
+    <div class="substatement mt-5">
+      <h2 class="ssttitle text-center">Adventure is closer than you think</h2>
+      <p class="sst1">A 5 minute walk from the farm puts you at the entrance to Scenic Canyon Regional Park where you can join the 17 km Mission Creek Greenway, a linear park featuring a beautiful creek and canyon environment that flourishes with flora and fauna, and the spectacular formations of Layer Cake Mountain.</p>
+      <p class="sst1">Just up the road is Myra Canyon, one of the most scenic sections of the famous and historic Kettle Valley Railway, offering breathtaking views of Lake Okanagan and the Okanagan Valley. In just over 8 km there are 16 wood trestles, 2 steel bridges, and 2 tunnels. This is a hiking and cycling paradise.</p>
+      <p class="sst1">Right in your front yard is Gallagher's Canyon Golf & Country Club, a spectacular 18-hole championship course rated as one of the best in Canada. If you prefer a shorter game, the 9 hole Pinnacle Course offers an inviting vista of natural beauty and sport for golfers of every caliber. Stroll down to the range and hit a few balls or hone your putting.</p>
+      <p class="sst1">Our farm offers a destination RV vacation surrounded by opportunities that you won’t find anywhere else. Peaceful and serene, surrounded by nature, yet just 15 minutes from downtown Kelowna… we truly have it all. Experience the rare opportunity to participate in the farm and learn about our important role in the community.</p>
+      <p class="sst1">It's our sincere pleasure to host you, and ensure that your visit is a memorable one...</p>
+    </div>
+
+    <div class="substatement2">
+      <img src="{{ url_for('static', filename='public/images/bee-on-purple-flower.jpg') }}" alt="Flower" class="img-fluid rounded shadow-lg mb-4 mb-lg-0">
+      <div class="sst1">
+        <ul class="feature-list">
+          <li>8 spacious pull-through RV sites (no tenting)</li>
+          <li>Vehicle parking at your site; boat and trailers extra</li>
+          <li>20, 30, and 50 Amp services</li>
+          <li>Water and waste hookups</li>
+          <li>Washroom and laundry facilities</li>
+          <li>Free WiFi</li>
+          <li>5 minute drive to grocery and liquor stores</li>
+          <li>Pets on leash are welcome</li>
+          <li>Quiet time 10 pm – 7 am</li>
+          <li>Check-in 12 noon</li>
+          <li>Check-out 11 am</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="contentheader2 mt-5">
+      <iframe src="https://www.google.com/maps/embed?pb=!1m14!1m8!1m3!1d10293.093177981696!2d-119.374794!3d49.8373222!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0xaff33e8b60b4cbf2!2sCanyon%20Farms%20Rv%20Park!5e0!3m2!1sen!2sca!4v1654728972778!5m2!1sen!2sca"
+              width="100%"
+              height="450"
+              style="border:0;"
+              allowfullscreen=""
+              loading="lazy"
+              referrerpolicy="no-referrer-when-downgrade"></iframe>
+    </div>
+  </div>
+</section>
+{% endblock %}

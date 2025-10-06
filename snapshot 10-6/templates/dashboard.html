@@ -1,0 +1,700 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .dashboard-toolbar {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    align-items: start;
+  }
+  .dashboard-toolbar .nav-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .dashboard-toolbar .dashboard-filter {
+    display: grid;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .dashboard-toolbar .dashboard-filter .switch-wrap {
+    min-width: 150px;
+  }
+  .dashboard-toolbar .dashboard-filter .month-wrap,
+  .dashboard-toolbar .dashboard-filter .week-wrap {
+    min-width: 200px;
+  }
+  .dashboard-toolbar .dashboard-filter .submit-wrap button {
+    width: 100%;
+  }
+  @media (min-width: 768px) {
+    .dashboard-toolbar .dashboard-filter {
+      grid-template-columns: auto minmax(0,1fr) minmax(0,1fr) auto;
+    }
+    .dashboard-toolbar .dashboard-filter .submit-wrap button {
+      width: auto;
+    }
+  }
+  .dashboard-toolbar .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .dashboard-toolbar .actions .btn {
+    flex: 1 1 150px;
+  }
+  @media (min-width: 768px) {
+    .dashboard-toolbar .actions .btn {
+      flex: 0 0 auto;
+    }
+  }
+</style>
+
+<h2>{{ heading_label }}</h2>
+{% if weekly_mode and week_range_label %}
+  <p class="text-muted small mt-1">{{ week_range_label }}</p>
+{% endif %}
+
+<div class="dashboard-toolbar mb-3">
+  <div class="nav-group">
+    <button id="prevBtn" type="button" class="btn btn-outline-secondary" onclick="goPrev()" {% if prev_disabled %}disabled{% endif %}>‹ Prev</button>
+    <button id="nextBtn" type="button" class="btn btn-outline-secondary" onclick="goNext()">Next ›</button>
+  </div>
+
+  <form id="viewForm" class="dashboard-filter" method="get" action="{{ url_for('dashboard') }}">
+    <input type="hidden" name="scope" id="scopeField" value="{{ 'week' if weekly_mode else 'month' }}">
+
+    <div class="switch-wrap">
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="weeklyToggle" {% if weekly_mode %}checked{% endif %}>
+        <label class="form-check-label" for="weeklyToggle">Weekly view</label>
+      </div>
+    </div>
+
+    <div class="month-wrap">
+      <input type="month" class="form-control" id="monthInput" name="month" value="{{ month_value }}" required>
+    </div>
+
+    <div class="week-wrap">
+      <div id="weekPicker" class="{{ '' if weekly_mode else 'd-none' }}">
+        <select class="form-select" id="weekSelect" name="start" {% if not weekly_mode %}disabled{% endif %}>
+          {% if week_options %}
+            {% for opt in week_options %}
+              <option value="{{ opt.value }}" {% if selected_week_start == opt.value %}selected{% endif %}>{{ opt.label }} ({{ opt.range }})</option>
+            {% endfor %}
+          {% else %}
+            <option value="" disabled selected>No weeks available</option>
+          {% endif %}
+        </select>
+      </div>
+    </div>
+
+    <div class="submit-wrap">
+      <button type="submit" class="btn btn-outline-primary w-100">Load</button>
+    </div>
+  </form>
+
+  <div class="actions">
+    <button class="btn btn-primary" onclick="newRes()">Add Reservation</button>
+    <button id="editToggleBtn" onclick="toggleEditMode()" class="btn btn-warning">Toggle Edit Mode</button>
+    <button id="optimizeBtn" onclick="optimizeSites()" class="btn btn-outline-primary">Optimize Layout</button>
+    <a href="{{ export_link }}" class="btn btn-success">Export</a>
+  </div>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-bordered table-sm align-middle {{ 'week-mode' if weekly_mode else 'month-mode' }}" style="width:100%;{% if not weekly_mode %}table-layout:fixed;{% endif %}">
+    <colgroup>
+      <col style="width: 90px;">
+      {% for d in days %}<col>{% endfor %}
+    </colgroup>
+    <thead>
+      <tr>
+        <th>Site</th>
+        {% for d in days %}
+          <th>
+            {% if weekly_mode %}
+              <div class="fw-semibold">{{ d.strftime('%a') }}</div>
+              <div class="small text-muted">{{ d.strftime('%b') }} {{ d.day }}</div>
+            {% else %}
+              {{ d.day }}
+            {% endif %}
+          </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sites %}
+      <tr data-siteid="{{ s[0] }}">
+        <td class="fw-bold text-start px-2">{{ site_display[s[0]] }}</td>
+        {% set day_ns = namespace(day=1, idx=0) %}
+        {% for cell in grid[s[0]] %}
+          {% if cell.type == 'res' %}
+            {% set status = (cell.res.status or '').lower() %}
+            {% set paid = (cell.res.paid or 'no').lower() %}
+            {% set short_cell = cell.span < 3 %}
+            {% set status_abbrev = 'C' if status == 'confirmed' else ('T' if status == 'tentative' else '?') %}
+            {% set paid_abbrev = 'P' if paid == 'yes' else 'U' %}
+            {% set start_date = days[day_ns.idx] %}
+            {% set tooltip_html = '<div class=\'text-start\'><strong>' ~ cell.res.guest ~ '</strong><br>' ~ cell.res.arrival ~ ' → ' ~ cell.res.departure %}
+            {% set tooltip_html = tooltip_html ~ '<br>Site: ' ~ cell.res.site_id %}
+            {% if cell.res.phone %}{% set tooltip_html = tooltip_html ~ '<br>Phone: ' ~ cell.res.phone %}{% endif %}
+            {% if cell.res.email %}{% set tooltip_html = tooltip_html ~ '<br>Email: ' ~ cell.res.email %}{% endif %}
+            {% set tooltip_html = tooltip_html ~ '<br>Status: ' ~ (cell.res.status or 'n/a') ~ '<br>Paid: ' ~ (cell.res.paid or 'no') %}
+            {% if cell.res.notes %}{% set tooltip_html = tooltip_html ~ '<br>Notes: ' ~ cell.res.notes %}{% endif %}
+            {% set tooltip_html = tooltip_html ~ '</div>' %}
+            <td class="res-block status-{{ status if status else 'unknown' }} paid-{{ 'yes' if paid == 'yes' else 'no' }}{% if short_cell %} short-cell{% endif %}"
+                colspan="{{ cell.span }}"
+                draggable="false"
+                data-day="{{ day_ns.day }}"
+                data-span="{{ cell.span }}"
+                data-date="{{ start_date.isoformat() }}"
+                data-index="{{ day_ns.idx }}"
+                data-res-id="{{ cell.res.id }}"
+                data-locked="{{ 1 if cell.res.site_locked else 0 }}"
+                data-res='{{ cell.res|tojson|escape }}'
+                data-tooltip="{{ tooltip_html }}"
+                onclick="showRes(JSON.parse(this.getAttribute('data-res')))">
+              <div class="guest-label">{{ cell.res.guest.rsplit(" ", 1)[-1] }}{% if cell.res.site_locked %} [L]{% endif %}</div>
+              <div class="res-tags">
+                {% if short_cell %}
+                  <span class="tag compact-tag tag-{{ (status_abbrev + paid_abbrev)|lower }}">{{ status_abbrev }}{{ paid_abbrev }}</span>
+                {% else %}
+                  <span class="tag status-tag">{{ cell.res.status|capitalize if cell.res.status else 'N/A' }}</span>
+                  <span class="tag paid-tag">{{ 'Paid' if paid == 'yes' else 'Unpaid' }}</span>
+                {% endif %}
+              </div>
+            </td>
+            {% set day_ns.day = day_ns.day + cell.span %}
+            {% set day_ns.idx = day_ns.idx + cell.span %}
+          {% else %}
+            {% set start_date = days[day_ns.idx] %}
+            <td class="free"
+                data-day="{{ day_ns.day }}"
+                data-span="1"
+                data-date="{{ start_date.isoformat() }}"
+                data-index="{{ day_ns.idx }}"></td>
+            {% set day_ns.day = day_ns.day + 1 %}
+            {% set day_ns.idx = day_ns.idx + 1 %}
+          {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="resModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Reservation</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="resContent"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== Period navigation & filters ===== */
+const weeklyMode = {{ 'true' if weekly_mode else 'false' }};
+const prevUrl = {{ prev_url|tojson }};
+const nextUrl = {{ next_url|tojson }};
+const dayDates = {{ day_iso_list|tojson }};
+
+function goPrev() {
+  if (!prevUrl) return;
+  window.location = prevUrl;
+}
+
+function goNext() {
+  if (!nextUrl) return;
+  window.location = nextUrl;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.getElementById('viewForm');
+  if (!form) return;
+  const weekToggle = document.getElementById('weeklyToggle');
+  const scopeField = document.getElementById('scopeField');
+  const weekPicker = document.getElementById('weekPicker');
+  const weekSelect = document.getElementById('weekSelect');
+  const monthInput = document.getElementById('monthInput');
+
+  function syncMode() {
+    const weekly = weekToggle && weekToggle.checked;
+    if (scopeField) scopeField.value = weekly ? 'week' : 'month';
+    if (weekPicker) weekPicker.classList.toggle('d-none', !weekly);
+    if (weekSelect) weekSelect.disabled = !weekly;
+  }
+
+  function submitForm() {
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit();
+    } else {
+      form.submit();
+    }
+  }
+
+  if (weekToggle) {
+    weekToggle.addEventListener('change', () => {
+      syncMode();
+      if (weekToggle.checked && weekSelect && !weekSelect.value && weekSelect.options.length) {
+        weekSelect.value = weekSelect.options[0].value;
+      }
+      submitForm();
+    });
+  }
+
+  if (monthInput) {
+    monthInput.addEventListener('change', () => {
+      if (weekToggle && weekToggle.checked && weekSelect && weekSelect.options.length) {
+        weekSelect.selectedIndex = 0;
+      }
+      submitForm();
+    });
+  }
+
+  if (weekSelect) {
+    weekSelect.addEventListener('change', submitForm);
+  }
+
+  syncMode();
+});
+
+/* ===== Existing dashboard logic ===== */
+let currentRes = null;
+let editMode = false;
+let tooltipInstances = [];
+
+function refreshTooltips(){
+  tooltipInstances.forEach(instance => instance.dispose());
+  tooltipInstances = [];
+  const cells = document.querySelectorAll('.res-block[data-tooltip]');
+  cells.forEach(el => {
+    el.removeAttribute('data-bs-toggle');
+    el.removeAttribute('title');
+    el.removeAttribute('data-bs-html');
+    el.removeAttribute('data-bs-delay');
+  });
+  if(editMode) return;
+  cells.forEach(el => {
+    const content = el.getAttribute('data-tooltip') || '';
+    el.setAttribute('title', content);
+    el.setAttribute('data-bs-toggle', 'tooltip');
+    el.setAttribute('data-bs-html', 'true');
+    el.setAttribute('data-bs-delay', '{"show":1000,"hide":100}');
+    tooltipInstances.push(new bootstrap.Tooltip(el));
+  });
+}
+
+function toggleEditMode(){
+  editMode = !editMode;
+  localStorage.setItem("editMode", editMode ? "1" : "0");
+  const btn = document.getElementById("editToggleBtn");
+  if(editMode){
+    btn.classList.remove("btn-warning"); btn.classList.add("btn-danger");
+    btn.innerText = "Edit Mode ON";
+  } else {
+    btn.classList.remove("btn-danger"); btn.classList.add("btn-warning");
+    btn.innerText = "Toggle Edit Mode";
+  }
+  document.querySelectorAll(".res-block").forEach(td=>{
+    const locked = td.getAttribute("data-locked") === "1";
+    td.setAttribute("draggable", editMode && !locked);
+    if(editMode && !locked){ td.addEventListener("dragstart", dragStart); }
+    else{ td.removeEventListener("dragstart", dragStart); }
+  });
+  document.querySelector("table").classList.toggle("edit-active", editMode);
+  refreshTooltips();
+}
+
+let dragDuration = 0;
+let dropTargets = [];
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function getCellSpan(cell){
+  return parseInt(cell.getAttribute("data-span") || cell.colSpan || "1", 10);
+}
+
+function getCellIndex(cell){
+  const raw = cell.getAttribute("data-index");
+  if (raw === null) return -1;
+  const idx = parseInt(raw, 10);
+  return Number.isNaN(idx) ? -1 : idx;
+}
+
+function computeStartIndex(cell, event){
+  const baseIndex = getCellIndex(cell);
+  if(baseIndex < 0) return null;
+  const span = getCellSpan(cell);
+  if(span <= 1 || !event){
+    return baseIndex;
+  }
+  const rect = cell.getBoundingClientRect();
+  if(!rect.width) return baseIndex;
+  const posX = Math.min(Math.max(event.clientX - rect.left, 0), rect.width);
+  const ratio = posX / rect.width;
+  const offset = Math.min(span - 1, Math.floor(ratio * span));
+  return baseIndex + offset;
+}
+
+function cellsForRange(row, startIndex, duration){
+  if(!row || startIndex === null || startIndex < 0 || duration < 1) return [];
+  const endIndex = startIndex + duration - 1;
+  const dayCells = Array.from(row.querySelectorAll("td")).slice(1);
+  return dayCells.filter(td => {
+    const cStart = getCellIndex(td);
+    if(cStart < 0) return false;
+    const cEnd = cStart + getCellSpan(td) - 1;
+    return !(endIndex < cStart || startIndex > cEnd);
+  });
+}
+
+function highlightRange(row, startIndex){
+  clearHighlights();
+  cellsForRange(row, startIndex, dragDuration).forEach(td => td.classList.add("drag-hover"));
+}
+
+function registerDropTargets(resId){
+  dropTargets = Array.from(document.querySelectorAll("tbody tr[data-siteid] td.free"));
+  const sameRes = Array.from(document.querySelectorAll(`tbody tr[data-siteid] td.res-block[data-res-id="${resId}"]`));
+  dropTargets.push(...sameRes);
+  dropTargets.forEach(cell => {
+    cell.addEventListener("dragover", dragOver);
+    cell.addEventListener("dragleave", dragLeave);
+    cell.addEventListener("drop", drop);
+  });
+}
+
+function dragEnd(){
+  dropTargets.forEach(cell => {
+    cell.removeEventListener("dragover", dragOver);
+    cell.removeEventListener("dragleave", dragLeave);
+    cell.removeEventListener("drop", drop);
+  });
+  dropTargets = [];
+  clearHighlights();
+}
+
+function dragStart(ev){
+  const cell = ev.target.closest("td");
+  if(!cell) return;
+  const res = JSON.parse(cell.getAttribute("data-res"));
+  if(res.site_locked){
+    ev.preventDefault();
+    return;
+  }
+  ev.dataTransfer.setData("res", JSON.stringify(res));
+  ev.dataTransfer.effectAllowed = "move";
+
+  dragDuration = Math.max(1, Math.round((new Date(res.departure) - new Date(res.arrival)) / DAY_MS));
+  registerDropTargets(String(res.id));
+  ev.target.addEventListener("dragend", dragEnd, { once: true });
+}
+
+function dragOver(ev){
+  ev.preventDefault();
+  const cell = ev.target.closest("td");
+  const row = cell ? cell.closest("tr") : null;
+  if(!cell || !row) return;
+  const startIndex = computeStartIndex(cell, ev);
+  if(startIndex === null || startIndex < 0) return;
+  highlightRange(row, startIndex);
+}
+
+function dragLeave(ev){
+  const current = ev.currentTarget;
+  const related = ev.relatedTarget;
+  if(related && current && current.contains(related)) return;
+  clearHighlights();
+}
+
+function clearHighlights(){
+  document.querySelectorAll(".drag-hover").forEach(c => c.classList.remove("drag-hover"));
+}
+
+async function drop(ev){
+  ev.preventDefault();
+  const cell = ev.target.closest("td");
+  const row = cell ? cell.closest("tr") : null;
+  if(!cell || !row) return;
+
+  const res = JSON.parse(ev.dataTransfer.getData("res"));
+  const site_id = row.getAttribute("data-siteid");
+  const startIndex = computeStartIndex(cell, ev);
+  if(startIndex === null || startIndex < 0 || startIndex >= dayDates.length) return;
+
+  dragEnd();
+
+  const baseIso = dayDates[startIndex];
+  const arrival = new Date(baseIso);
+  if(Number.isNaN(arrival.getTime())) return;
+  const departure = new Date(arrival);
+  departure.setDate(departure.getDate() + dragDuration);
+
+  const fmt = d => d.toISOString().split('T')[0];
+  const data = { id: res.id, site_id: site_id, arrival: fmt(arrival), departure: fmt(departure) };
+
+  const resp = await fetch("/api/reservation/move",{
+    method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)
+  });
+  const out = await resp.json();
+  if(out.ok) location.reload();
+  else {
+    cell.classList.add("drag-invalid");
+    setTimeout(()=>cell.classList.remove("drag-invalid"), 1500);
+    alert(out.error);
+  }
+}
+
+async function optimizeSites(){
+  if(!confirm("Optimize site assignments to consolidate open spans?")) return;
+  const btn = document.getElementById("optimizeBtn");
+  const originalLabel = btn ? btn.innerText : "";
+  if(btn){ btn.disabled = true; btn.innerText = "Optimizing..."; }
+  try {
+    const resp = await fetch("/api/reservation/optimize", { method: "POST" });
+    const data = await resp.json();
+    if(!resp.ok || !data.ok){
+      const message = data && data.error ? data.error : "Optimization failed.";
+      alert(message);
+      if(btn){ btn.disabled = false; btn.innerText = originalLabel || "Optimize Layout"; }
+      return;
+    }
+    window.location.reload();
+  } catch(err){
+    alert(`Optimization failed: ${err.message}`);
+    if(btn){ btn.disabled = false; btn.innerText = originalLabel || "Optimize Layout"; }
+  }
+}
+
+function showRes(res){
+  res.site_locked = !!res.site_locked;
+  currentRes = res;
+  renderRes(res);
+  let modal = new bootstrap.Modal(document.getElementById('resModal'));
+  modal.show();
+}
+
+function renderRes(res){
+  const html = `
+    <div class="row g-2 mb-2">
+      <div class="col text-end">
+        <a href="#" onclick="editRes()">Edit</a>
+        &nbsp;|&nbsp;
+        <a href="#" class="text-danger" onclick="deleteRes(${res.id})">Delete</a>
+      </div>
+    </div>
+    <div class="row"><div class="col-4 fw-semibold">Guest:</div><div class="col-8">${res.guest}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Phone:</div><div class="col-8">${res.phone||''}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Email:</div><div class="col-8">${res.email||''}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Arrival:</div><div class="col-8">${res.arrival}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Departure:</div><div class="col-8">${res.departure}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Status:</div><div class="col-8">${res.status}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">RV Size:</div><div class="col-8">${res.rv_size||''}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Adults / Children:</div><div class="col-8">${res.num_adults||0} / ${res.num_children||0}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Paid:</div><div class="col-8">${res.paid||'no'}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Site Locked:</div><div class="col-8">${res.site_locked ? 'Yes' : 'No'}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Notes:</div><div class="col-8">${res.notes||''}</div></div>`;
+  document.getElementById("resContent").innerHTML = html;
+}
+
+function editRes(){
+  const r = currentRes;
+  const html = `
+    <form onsubmit="return saveRes(event)">
+      <div class="row g-2">
+        <div class="col-4"><label class="form-label">Guest</label></div>
+        <div class="col-8"><input class="form-control" name="guest" value="${r.guest||''}" required></div>
+
+        <div class="col-4"><label class="form-label">Phone</label></div>
+        <div class="col-8"><input class="form-control" name="phone" value="${r.phone||''}"></div>
+
+        <div class="col-4"><label class="form-label">Email</label></div>
+        <div class="col-8"><input class="form-control" name="email" value="${r.email||''}"></div>
+
+        <div class="col-4"><label class="form-label">Arrival</label></div>
+        <div class="col-8"><input type="date" class="form-control" name="arrival" value="${r.arrival}" required></div>
+
+        <div class="col-4"><label class="form-label">Departure</label></div>
+        <div class="col-8"><input type="date" class="form-control" name="departure" value="${r.departure}" required></div>
+
+        <div class="col-4"><label class="form-label">Site ID</label></div>
+        <div class="col-8"><input class="form-control" name="site_id" value="${r.site_id}"></div>
+
+        <div class="col-4"><label class="form-label">Lock to Site</label></div>
+        <div class="col-8">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" name="site_locked" ${r.site_locked ? 'checked' : ''}>
+          </div>
+        </div>
+
+        <div class="col-4"><label class="form-label">Status</label></div>
+        <div class="col-8">
+          <select class="form-select" name="status">
+            <option ${r.status=='tentative'?'selected':''}>tentative</option>
+            <option ${r.status=='confirmed'?'selected':''}>confirmed</option>
+          </select>
+        </div>
+
+        <div class="col-4"><label class="form-label">RV Size</label></div>
+        <div class="col-8"><input class="form-control" name="rv_size" value="${r.rv_size||''}" placeholder="e.g. 30ft"></div>
+
+        <div class="col-4"><label class="form-label">Adults</label></div>
+        <div class="col-8"><input type="number" class="form-control" name="num_adults" value="${r.num_adults||0}"></div>
+
+        <div class="col-4"><label class="form-label">Children</label></div>
+        <div class="col-8"><input type="number" class="form-control" name="num_children" value="${r.num_children||0}"></div>
+
+        <div class="col-4"><label class="form-label">Paid</label></div>
+        <div class="col-8">
+          <select class="form-select" name="paid">
+            <option value="no" ${r.paid=='no'?'selected':''}>No</option>
+            <option value="yes" ${r.paid=='yes'?'selected':''}>Yes</option>
+          </select>
+        </div>
+
+        <div class="col-4"><label class="form-label">Notes</label></div>
+        <div class="col-8"><textarea class="form-control" name="notes" rows="3">${r.notes||''}</textarea></div>
+      </div>
+
+      <button class="btn btn-primary w-100 mt-3">Save</button>
+    </form>`;
+  document.getElementById("resContent").innerHTML = html;
+}
+
+async function saveRes(e){
+  e.preventDefault();
+  const f = e.target;
+  const data = {
+    id: currentRes.id,
+    guest: f.guest.value,
+    phone: f.phone.value,
+    email: f.email.value,
+    arrival: f.arrival.value,
+    departure: f.departure.value,
+    site_id: f.site_id.value,
+    status: f.status.value,
+    rv_size: f.rv_size.value,
+    num_adults: f.num_adults.value,
+    num_children: f.num_children.value,
+    paid: f.paid.value,
+    notes: f.notes.value,
+    site_locked: f.site_locked.checked ? 1 : 0
+  };
+  const resp = await fetch("/api/reservation/update",{
+    method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)
+  });
+  const out = await resp.json();
+  if(out.ok){
+    if(out.warnings && out.warnings.length){
+      alert(out.warnings.join('\\n'));
+    }
+    location.reload();
+  } else {
+    alert(out.error || 'Unable to update reservation.');
+  }
+}
+
+function newRes(){
+  const modal = new bootstrap.Modal(document.getElementById('resModal'));
+  document.getElementById("resContent").innerHTML = `
+    <form onsubmit="return saveNewRes(event)">
+      <div class="row g-2">
+        <div class="col-4"><label class="form-label">Guest</label></div>
+        <div class="col-8"><input class="form-control" name="guest" placeholder="Guest Name" required></div>
+
+        <div class="col-4"><label class="form-label">Phone</label></div>
+        <div class="col-8"><input class="form-control" name="phone" placeholder="Phone"></div>
+
+        <div class="col-4"><label class="form-label">Email</label></div>
+        <div class="col-8"><input class="form-control" name="email" placeholder="Email"></div>
+
+        <div class="col-4"><label class="form-label">Arrival</label></div>
+        <div class="col-8"><input type="date" class="form-control" name="arrival" required></div>
+
+        <div class="col-4"><label class="form-label">Departure</label></div>
+        <div class="col-8"><input type="date" class="form-control" name="departure" required></div>
+
+        <div class="col-4"><label class="form-label">Site</label></div>
+        <div class="col-8">
+          <select class="form-select" name="site_id">
+            <option value="">Auto Assign</option>
+            {% for s in sites %}<option value="{{s[0]}}">{{ site_display[s[0]] }}</option>{% endfor %}
+          </select>
+        </div>
+
+        <div class="col-4"><label class="form-label">Lock to Site</label></div>
+        <div class="col-8">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" name="site_locked">
+          </div>
+        </div>
+
+        <div class="col-4"><label class="form-label">Status</label></div>
+        <div class="col-8">
+          <select class="form-select" name="status">
+            <option>tentative</option><option>confirmed</option>
+          </select>
+        </div>
+
+        <div class="col-4"><label class="form-label">RV Size</label></div>
+        <div class="col-8"><input class="form-control" name="rv_size" placeholder="e.g. 30ft"></div>
+
+        <div class="col-4"><label class="form-label">Adults</label></div>
+        <div class="col-8"><input type="number" class="form-control" name="num_adults" value="0"></div>
+
+        <div class="col-4"><label class="form-label">Children</label></div>
+        <div class="col-8"><input type="number" class="form-control" name="num_children" value="0"></div>
+
+        <div class="col-4"><label class="form-label">Paid</label></div>
+        <div class="col-8">
+          <select class="form-select" name="paid"><option value="no">No</option><option value="yes">Yes</option></select>
+        </div>
+
+        <div class="col-4"><label class="form-label">Notes</label></div>
+        <div class="col-8"><textarea class="form-control" name="notes" rows="3"></textarea></div>
+      </div>
+      <button class="btn btn-success w-100 mt-3">Add</button>
+    </form>`;
+  modal.show();
+}
+
+async function saveNewRes(e){
+  e.preventDefault();
+  const f = e.target;
+  const data = {
+    guest: f.guest.value, phone: f.phone.value, email: f.email.value,
+    arrival: f.arrival.value, departure: f.departure.value,
+    site_id: f.site_id.value, status: f.status.value,
+    rv_size: f.rv_size.value, num_adults: f.num_adults.value,
+    num_children: f.num_children.value, paid: f.paid.value, notes: f.notes.value,
+    site_locked: f.site_locked.checked ? 1 : 0
+  };
+  const resp = await fetch("/api/reservation/add",{
+    method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)
+  });
+  const out = await resp.json();
+  if(out.ok) location.reload(); else alert(out.error);
+}
+
+async function deleteRes(id){
+  if(!confirm("Delete this reservation?")) return;
+  const resp = await fetch("/api/reservation/delete",{
+    method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify({id})
+  });
+  const out = await resp.json();
+  if(out.ok) location.reload(); else alert(out.error);
+}
+
+window.addEventListener("DOMContentLoaded", ()=>{
+  if(localStorage.getItem("editMode")==="1"){ editMode = false; toggleEditMode(); }
+  refreshTooltips();
+});
+</script>
+
+{% endblock %}

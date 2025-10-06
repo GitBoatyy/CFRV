@@ -379,30 +379,28 @@ def login():
 
 @app.route("/logout")
 def logout():
-    session.clear
-    return redirect(url_for("availability"))
+    session.clear()
+    return redirect(url_for("public_home"))
 
 # -----------------------
-# Public availability (read-only)
+# Public availability helpers
 # -----------------------
-@app.route("/")
-def home():
-    return redirect(url_for("availability"))
-
-@app.route("/availability")
-def availability():
+def build_availability_view(year=None, month=None, clamp_to_current=True):
     today = date.today()
-    year = request.args.get("year", type=int, default=today.year)
-    month = request.args.get("month", type=int, default=today.month)
+    if year is None:
+        year = today.year
+    if month is None:
+        month = today.month
 
-    # no browsing to past months for public
-    if (year, month) < (today.year, today.month):
+    if clamp_to_current and (year, month) < (today.year, today.month):
         year, month = today.year, today.month
 
     num_days = calendar.monthrange(year, month)[1]
     days = [date(year, month, d) for d in range(1, num_days + 1)]
 
-    sites = query_db("SELECT id,name FROM sites ORDER BY CASE WHEN name LIKE 'Site %' THEN CAST(substr(name,6) AS INTEGER) ELSE 9999 END, name")
+    sites = query_db(
+        "SELECT id,name FROM sites ORDER BY CASE WHEN name LIKE 'Site %' THEN CAST(substr(name,6) AS INTEGER) ELSE 9999 END, name"
+    )
     reservations = query_db("SELECT site_id, arrival_date, departure_date, status FROM reservations")
 
     reservations_by_site = {}
@@ -432,8 +430,6 @@ def availability():
                     break
             row.append(cell_state)
         site_status_map[sid] = row
-
-    site_lookup = {sid: name for sid, name in sites}
 
     full_hookup_ids, power_water_ids = [], []
     for sid, name in sites:
@@ -504,7 +500,9 @@ def availability():
                 "state": aggregate,
                 "max_run": display_run,
                 "actual_run": actual_run,
-                "free_sites": site_count,
+                "free_sites": min(site_count, full_threshold),
+                "raw_free_sites": site_count,
+                "threshold": full_threshold,
                 "is_full": aggregate == "free" and site_count >= full_threshold,
                 "capped": aggregate == "free" and actual_run > MAX_AVAIL_DISPLAY_DAYS
             })
@@ -514,19 +512,142 @@ def availability():
             "threshold": full_threshold
         })
 
+    cal = calendar.Calendar(firstweekday=calendar.MONDAY)
+    weekday_labels = [calendar.day_name[(calendar.MONDAY + i) % 7][:3] for i in range(7)]
+    calendar_weeks = []
+    for week in cal.monthdatescalendar(year, month):
+        week_cells = []
+        for day in week:
+            in_month = (day.month == month)
+            cell_data = {
+                "date": day,
+                "day": day.day,
+                "in_month": in_month,
+                "state": "out",
+                "groups": []
+            }
+            if in_month:
+                day_index = day.day - 1
+                groups_summary = []
+                for group in group_rows:
+                    cell = group["cells"][day_index]
+                    groups_summary.append({
+                        "name": group["name"],
+                        "state": cell["state"],
+                        "free_sites": cell["raw_free_sites"],
+                        "max_run": cell["actual_run"],
+                        "threshold": cell["threshold"],
+                    })
+
+                has_available = any(g["state"] == "free" and g["free_sites"] > 0 for g in groups_summary)
+                any_tentative = any(g["state"] == "tentative" for g in groups_summary)
+                if has_available:
+                    overall_state = "free"
+                elif any_tentative:
+                    overall_state = "limited"
+                else:
+                    overall_state = "confirmed"
+                cell_data.update({
+                    "state": overall_state,
+                    "groups": groups_summary
+                })
+            week_cells.append(cell_data)
+        calendar_weeks.append(week_cells)
+
     prev_y, prev_m = (year - 1, 12) if month == 1 else (year, month - 1)
     next_y, next_m = (year + 1, 1) if month == 12 else (year, month + 1)
 
-    month_name = calendar.month_name[month]
+    return {
+        "today": today,
+        "year": year,
+        "month": month,
+        "days": days,
+        "group_rows": group_rows,
+        "month_name": calendar.month_name[month],
+        "prev_year": prev_y,
+        "prev_month": prev_m,
+        "next_year": next_y,
+        "next_month": next_m,
+        "calendar_weeks": calendar_weeks,
+        "weekday_labels": weekday_labels,
+    }
+
+
+@app.route("/availability")
+def availability():
+    year = request.args.get("year", type=int)
+    month = request.args.get("month", type=int)
+    context = build_availability_view(year, month)
+
+    prev_link = None
+    if not ((context["year"], context["month"]) == (context["today"].year, context["today"].month)):
+        prev_link = url_for(
+            "availability",
+            year=context["prev_year"],
+            month=context["prev_month"],
+        )
+
+    next_link = url_for(
+        "availability",
+        year=context["next_year"],
+        month=context["next_month"],
+    )
 
     return render_template(
         "availability.html",
-        year=year, month=month, days=days,
-        group_rows=group_rows, today=today,
-        month_name=month_name,
-        prev_year=prev_y, prev_month=prev_m,
-        next_year=next_y, next_month=next_m
+        **context,
+        prev_link=prev_link,
+        next_link=next_link,
+        jump_url=url_for("availability"),
     )
+
+
+@app.route("/")
+def public_home():
+    return render_template("public/index.html")
+
+
+@app.route("/book-now")
+def public_book_now():
+    year = request.args.get("year", type=int)
+    month = request.args.get("month", type=int)
+    context = build_availability_view(year, month)
+
+    prev_link = None
+    if (context["year"], context["month"]) > (context["today"].year, context["today"].month):
+        prev_link = url_for(
+            "public_book_now",
+            year=context["prev_year"],
+            month=context["prev_month"],
+        )
+
+    next_link = url_for(
+        "public_book_now",
+        year=context["next_year"],
+        month=context["next_month"],
+    )
+
+    calendar_kwargs = {
+        **context,
+        "prev_link": prev_link,
+        "next_link": next_link,
+        "jump_url": url_for("public_book_now"),
+    }
+
+    return render_template(
+        "public/book-now.html",
+        availability_context=calendar_kwargs,
+    )
+
+
+@app.route("/about")
+def public_about():
+    return render_template("public/about-us.html")
+
+
+@app.route("/pictures")
+def public_pictures():
+    return render_template("public/picturespage.html")
 
 # -----------------------
 # Staff dashboard
@@ -536,34 +657,98 @@ def dashboard():
     if "user_id" not in session:
         return redirect(url_for("login"))
 
-    # current selection
-    year = int(request.args.get("year", datetime.now().year))
-    month = int(request.args.get("month", datetime.now().month))
+    scope = request.args.get("scope", "month").lower()
+    if scope not in {"month", "week"}:
+        scope = "month"
+    weekly_mode = scope == "week"
 
-    # prev/next helpers
-    def prev_ym(y, m):
-        return (y-1, 12) if m == 1 else (y, m-1)
-    def next_ym(y, m):
-        return (y+1, 1) if m == 12 else (y, m+1)
+    today = date.today()
+    month_param = request.args.get("month")
+    year_param = request.args.get("year")
 
-    prev_year, prev_month = prev_ym(year, month)
-    next_year, next_month = next_ym(year, month)
+    def parse_year_month():
+        base_year, base_month = today.year, today.month
+        if month_param and "-" in month_param:
+            try:
+                raw_y, raw_m = month_param.split("-", 1)
+                base_year, base_month = int(raw_y), int(raw_m)
+            except ValueError:
+                pass
+        else:
+            try:
+                base_year = int(year_param)
+            except (TypeError, ValueError):
+                base_year = today.year
+            try:
+                base_month = int(request.args.get("month", base_month))
+            except (TypeError, ValueError):
+                base_month = today.month
+        base_month = max(1, min(12, base_month))
+        return base_year, base_month
 
-    num_days = calendar.monthrange(year, month)[1]
-    days = [date(year, month, d) for d in range(1, num_days + 1)]
+    filter_year, filter_month = parse_year_month()
+    month_value = f"{filter_year:04d}-{filter_month:02d}"
 
-    sites = query_db("SELECT id,name FROM sites ORDER BY CASE WHEN name LIKE 'Site %' THEN CAST(substr(name,6) AS INTEGER) ELSE 9999 END, name")
+    week_options = week_options_for_month(filter_year, filter_month)
+    week_start_param = request.args.get("start")
+    selected_week_start = ""
+    week_range_label = ""
+    heading_label = ""
+    week_start = None
+
+    if weekly_mode:
+        if not week_options:
+            fallback_start = date(filter_year, filter_month, 1)
+            week_options = [{
+                "value": fallback_start.isoformat(),
+                "label": f"Week of {calendar.month_name[fallback_start.month]} {fallback_start.day}",
+                "range": f"{calendar.month_abbr[fallback_start.month]} {fallback_start.day} – {calendar.month_abbr[(fallback_start + timedelta(days=6)).month]} {(fallback_start + timedelta(days=6)).day}",
+            }]
+        default_start = week_options[0]["value"]
+        week_start_value = week_start_param or default_start
+        if not any(opt["value"] == week_start_value for opt in week_options):
+            week_start_value = default_start
+        try:
+            week_start = datetime.strptime(week_start_value, "%Y-%m-%d").date()
+        except ValueError:
+            week_start = datetime.strptime(default_start, "%Y-%m-%d").date()
+            week_start_value = default_start
+        selected_week_start = week_start_value
+        week_end = week_start + timedelta(days=6)
+        if week_start.month == week_end.month and week_start.year == week_end.year:
+            week_range_label = f"{calendar.month_name[week_start.month]} {week_start.day} – {week_end.day}"
+        else:
+            week_range_label = (
+                f"{calendar.month_name[week_start.month]} {week_start.day} – "
+                f"{calendar.month_name[week_end.month]} {week_end.day}"
+            )
+        heading_label = f"Week of {calendar.month_name[week_start.month]} {week_start.day}"
+        days = [week_start + timedelta(days=i) for i in range(7)]
+    else:
+        num_days = calendar.monthrange(filter_year, filter_month)[1]
+        days = [date(filter_year, filter_month, d) for d in range(1, num_days + 1)]
+        heading_label = f"{calendar.month_name[filter_month]} {filter_year}"
+
+    day_iso_list = [d.isoformat() for d in days]
+    start_iso, end_iso = day_iso_list[0], day_iso_list[-1]
+
+    sites = query_db(
+        "SELECT id,name FROM sites ORDER BY CASE WHEN name LIKE 'Site %' THEN CAST(substr(name,6) AS INTEGER) ELSE 9999 END, name"
+    )
     site_display = {sid: short_site_label(name) for sid, name in sites}
-    start, end = days[0].isoformat(), days[-1].isoformat()
 
-    reservations = query_db("""
+    reservations = query_db(
+        """
         SELECT r.id, r.site_id, r.guest_name, r.phone, r.email,
                r.arrival_date, r.departure_date, r.status,
                r.rv_size, r.num_adults, r.num_children, r.paid, r.notes,
                r.site_locked
         FROM reservations r
         WHERE NOT (r.departure_date < ? OR r.arrival_date > ?)
-    """, (start, end))
+        ORDER BY r.site_id ASC, r.arrival_date
+    """,
+        (start_iso, end_iso),
+    )
 
     res_map = {}
     for r in reservations:
@@ -581,24 +766,76 @@ def dashboard():
             "num_children": r[10] or 0,
             "paid": r[11],
             "notes": r[12] or "",
-            "site_locked": bool(r[13])
+            "site_locked": bool(r[13]),
         })
 
     grid = {sid: build_row_cells(days, res_map.get(sid, [])) for sid, _ in sites}
+
+    min_period_start = date(today.year, today.month, 1)
+    prev_url = next_url = None
+    prev_disabled = False
+
+    if weekly_mode:
+        week_start_dt = week_start or days[0]
+        prev_start = week_start_dt - timedelta(days=7)
+        next_start = week_start_dt + timedelta(days=7)
+        if prev_start >= min_period_start:
+            prev_url = url_for(
+                "dashboard",
+                scope="week",
+                month=f"{prev_start.year:04d}-{prev_start.month:02d}",
+                start=prev_start.isoformat(),
+            )
+        else:
+            prev_disabled = True
+        next_url = url_for(
+            "dashboard",
+            scope="week",
+            month=f"{next_start.year:04d}-{next_start.month:02d}",
+            start=next_start.isoformat(),
+        )
+        export_link = url_for(
+            "export_reservations",
+            scope="week",
+            month=month_value,
+            start=selected_week_start or day_iso_list[0],
+        )
+    else:
+        def prev_ym(y, m):
+            return (y - 1, 12) if m == 1 else (y, m - 1)
+
+        def next_ym(y, m):
+            return (y + 1, 1) if m == 12 else (y, m + 1)
+
+        prev_year, prev_month = prev_ym(filter_year, filter_month)
+        next_year, next_month = next_ym(filter_year, filter_month)
+        prev_start = date(prev_year, prev_month, 1)
+        if prev_start >= min_period_start:
+            prev_url = url_for("dashboard", scope="month", year=prev_year, month=prev_month)
+        else:
+            prev_disabled = True
+        next_url = url_for("dashboard", scope="month", year=next_year, month=next_month)
+        export_link = url_for("export_reservations", scope="month", year=filter_year, month=filter_month)
 
     return render_template(
         "dashboard.html",
         sites=sites,
         days=days,
+        day_iso_list=day_iso_list,
         grid=grid,
-        year=year,
-        month=month,
-        month_name=calendar.month_name[month],
+        heading_label=heading_label,
         site_display=site_display,
-        prev_year=prev_year,
-        prev_month=prev_month,
-        next_year=next_year,
-        next_month=next_month
+        weekly_mode=weekly_mode,
+        week_options=week_options,
+        selected_week_start=selected_week_start,
+        week_range_label=week_range_label,
+        month_value=month_value,
+        prev_url=prev_url,
+        next_url=next_url,
+        prev_disabled=prev_disabled,
+        export_link=export_link,
+        year=filter_year,
+        month=filter_month,
     )
 
 
@@ -788,33 +1025,83 @@ def month_iter(y1, m1, y2, m2):
         else:
             m += 1
 
+
+def week_options_for_month(year: int, month: int):
+    """Return week selector metadata for a given month."""
+    cal = calendar.Calendar(firstweekday=calendar.MONDAY)
+    options, seen = [], set()
+    for week in cal.monthdatescalendar(year, month):
+        start_d, end_d = week[0], week[-1]
+        if start_d.month != month and end_d.month != month:
+            continue
+        if start_d in seen:
+            continue
+        seen.add(start_d)
+        start_label = f"Week of {calendar.month_name[start_d.month]} {start_d.day}"
+        start_abbr = calendar.month_abbr[start_d.month]
+        end_abbr = calendar.month_abbr[end_d.month]
+        if start_d.year == end_d.year:
+            range_label = f"{start_abbr} {start_d.day} – {end_abbr} {end_d.day}"
+        else:
+            range_label = (
+                f"{start_abbr} {start_d.day} {start_d.year} – "
+                f"{end_abbr} {end_d.day} {end_d.year}"
+            )
+        options.append({
+            "value": start_d.isoformat(),
+            "label": start_label,
+            "range": range_label,
+        })
+    options.sort(key=lambda opt: opt["value"])
+    return options
+
+
 @app.route("/export")
 def export_reservations():
     if "user_id" not in session:
         return redirect(url_for("login"))
 
-    mode = request.args.get("scope", "month")  # "month" or "range"
+    mode = request.args.get("scope", "month")  # "month", "week", or "range"
     today = date.today()
-    year = request.args.get("year", default=today.year, type=int)
-    month = request.args.get("month", default=today.month, type=int)
+
+    year_param = request.args.get("year")
+    month_param = request.args.get("month")
+    try:
+        year = int(year_param)
+    except (TypeError, ValueError):
+        year = today.year
+    try:
+        month = int(month_param)
+    except (TypeError, ValueError):
+        month = today.month
+    if month_param and "-" in month_param:
+        try:
+            y_str, m_str = month_param.split("-", 1)
+            year = int(y_str)
+            month = int(m_str)
+        except ValueError:
+            pass
+    month = max(1, min(12, month))
 
     from_month = request.args.get("from")  # 'YYYY-MM'
     to_month = request.args.get("to")      # 'YYYY-MM'
+    week_start_param = request.args.get("start")
 
-    form_from_value = from_month if from_month else f"{year:04d}-{month:02d}"
-    form_to_value = to_month if to_month else form_from_value
+    form_from_value = f"{year:04d}-{month:02d}"
+    form_to_value = form_from_value
+    selected_week_start = ""
 
-    sites = query_db("SELECT id,name FROM sites ORDER BY CASE WHEN name LIKE 'Site %' THEN CAST(substr(name,6) AS INTEGER) ELSE 9999 END, name")
+    sites = query_db(
+        "SELECT id,name FROM sites ORDER BY CASE WHEN name LIKE 'Site %' THEN CAST(substr(name,6) AS INTEGER) ELSE 9999 END, name"
+    )
     site_lookup = {sid: name for sid, name in sites}
     site_short_lookup = {sid: short_site_label(name) for sid, name in sites}
     sections = []
 
-    def collect_month_data(yy, mm):
-        nd = calendar.monthrange(yy, mm)[1]
-        dlist = [date(yy, mm, d) for d in range(1, nd + 1)]
-        s_iso, e_iso = dlist[0].isoformat(), dlist[-1].isoformat()
-
-        rows = query_db("""
+    def collect_period(day_list, heading_label, heading_year, period_type="month", extra=None):
+        s_iso, e_iso = day_list[0].isoformat(), day_list[-1].isoformat()
+        rows = query_db(
+            """
             SELECT r.id, r.site_id, r.guest_name, r.phone, r.email,
                    r.arrival_date, r.departure_date, r.status,
                    r.rv_size, r.num_campers, r.paid, r.notes,
@@ -822,19 +1109,28 @@ def export_reservations():
             FROM reservations r
             WHERE NOT (r.departure_date < ? OR r.arrival_date > ?)
             ORDER BY r.site_id ASC, r.arrival_date
-        """, (s_iso, e_iso))
+            """,
+            (s_iso, e_iso),
+        )
 
         res_map, all_res_list = {}, []
         for r in rows:
             rd = {
-                "id": r[0], "site_id": r[1], "guest": r[2],
-                "phone": r[3], "email": r[4],
-                "arrival": r[5], "departure": r[6], "status": r[7],
-                "rv_size": r[8], "num_campers": r[9], "paid": r[10],
+                "id": r[0],
+                "site_id": r[1],
+                "guest": r[2],
+                "phone": r[3],
+                "email": r[4],
+                "arrival": r[5],
+                "departure": r[6],
+                "status": r[7],
+                "rv_size": r[8],
+                "num_campers": r[9],
+                "paid": r[10],
                 "notes": r[11] or "",
                 "num_adults": r[12] if r[12] is not None else 0,
                 "num_children": r[13] if r[13] is not None else 0,
-                "site_locked": bool(r[14])
+                "site_locked": bool(r[14]),
             }
             res_map.setdefault(r[1], []).append(rd)
             all_res_list.append(rd)
@@ -843,15 +1139,47 @@ def export_reservations():
 
         grid = {}
         for sid, _sname in sites:
-            grid[sid] = build_row_cells(dlist, res_map.get(sid, []))
-        sections.append({
-            "year": yy,
-            "month": mm,
-            "month_label": calendar.month_name[mm],
-            "days": dlist,
+            grid[sid] = build_row_cells(day_list, res_map.get(sid, []))
+
+        entry = {
+            "year": heading_year,
+            "month": day_list[0].month,
+            "month_label": heading_label,
+            "days": day_list,
             "grid": grid,
-            "all_res_list": all_res_list
-        })
+            "all_res_list": all_res_list,
+            "period_type": period_type,
+        }
+        if extra:
+            entry.update(extra)
+        sections.append(entry)
+
+    def collect_month_data(yy, mm):
+        nd = calendar.monthrange(yy, mm)[1]
+        dlist = [date(yy, mm, d) for d in range(1, nd + 1)]
+        collect_period(dlist, calendar.month_name[mm], str(yy), period_type="month")
+
+    def collect_week_data(start_dt: date):
+        days = [start_dt + timedelta(days=i) for i in range(7)]
+        end_dt = days[-1]
+        if start_dt.year == end_dt.year:
+            heading_year = str(start_dt.year)
+        else:
+            heading_year = f"{start_dt.year} / {end_dt.year}"
+        if start_dt.month == end_dt.month:
+            heading_label = f"Week of {calendar.month_name[start_dt.month]} {start_dt.day}"
+        else:
+            heading_label = (
+                f"Week of {calendar.month_name[start_dt.month]} {start_dt.day} – "
+                f"{calendar.month_name[end_dt.month]} {end_dt.day}"
+            )
+        extra = {
+            "week_start": start_dt,
+            "week_end": end_dt,
+        }
+        collect_period(days, heading_label, heading_year, period_type="week", extra=extra)
+
+    week_options = []
 
     if mode == "range" and from_month:
         if not to_month:
@@ -869,6 +1197,54 @@ def export_reservations():
         form_to_value = f"{ty:04d}-{tm:02d}"
         for (yy, mm) in month_iter(fy, fm, ty, tm):
             collect_month_data(yy, mm)
+        week_options = week_options_for_month(year, month)
+    elif mode == "week":
+        week_options = week_options_for_month(year, month)
+        if not week_options:
+            fallback_start = date(year, month, 1)
+            fallback_end = fallback_start + timedelta(days=6)
+            start_abbr = calendar.month_abbr[fallback_start.month]
+            end_abbr = calendar.month_abbr[fallback_end.month]
+            if fallback_start.year == fallback_end.year:
+                range_label = f"{start_abbr} {fallback_start.day} – {end_abbr} {fallback_end.day}"
+            else:
+                range_label = (
+                    f"{start_abbr} {fallback_start.day} {fallback_start.year} – "
+                    f"{end_abbr} {fallback_end.day} {fallback_end.year}"
+                )
+            week_options.append({
+                "value": fallback_start.isoformat(),
+                "label": f"Week of {calendar.month_name[fallback_start.month]} {fallback_start.day}",
+                "range": range_label,
+            })
+        default_start = week_options[0]["value"]
+        week_start_value = week_start_param or default_start
+        try:
+            week_start_dt = datetime.strptime(week_start_value, "%Y-%m-%d").date()
+        except ValueError:
+            week_start_dt = datetime.strptime(default_start, "%Y-%m-%d").date()
+            week_start_value = week_start_dt.isoformat()
+        selected_week_start = week_start_dt.isoformat()
+        if all(opt["value"] != selected_week_start for opt in week_options):
+            end_dt = week_start_dt + timedelta(days=6)
+            start_abbr = calendar.month_abbr[week_start_dt.month]
+            end_abbr = calendar.month_abbr[end_dt.month]
+            if week_start_dt.year == end_dt.year:
+                range_label = f"{start_abbr} {week_start_dt.day} – {end_abbr} {end_dt.day}"
+            else:
+                range_label = (
+                    f"{start_abbr} {week_start_dt.day} {week_start_dt.year} – "
+                    f"{end_abbr} {end_dt.day} {end_dt.year}"
+                )
+            week_options.append({
+                "value": selected_week_start,
+                "label": f"Week of {calendar.month_name[week_start_dt.month]} {week_start_dt.day}",
+                "range": range_label,
+            })
+            week_options.sort(key=lambda opt: opt["value"])
+        collect_week_data(week_start_dt)
+        form_from_value = f"{year:04d}-{month:02d}"
+        form_to_value = form_from_value
     else:
         if from_month:
             try:
@@ -879,17 +1255,25 @@ def export_reservations():
         collect_month_data(year, month)
         form_from_value = f"{year:04d}-{month:02d}"
         form_to_value = form_from_value
+        week_options = week_options_for_month(year, month)
+
+    month_value = f"{year:04d}-{month:02d}"
 
     return render_template(
         "export.html",
         scope=mode,
-        year=year, month=month,
+        year=year,
+        month=month,
+        month_value=month_value,
         sites=sites,
         site_lookup=site_lookup,
         site_short_lookup=site_short_lookup,
         sections=sections,
         form_from_value=form_from_value,
-        form_to_value=form_to_value
+        form_to_value=form_to_value,
+        week_options=week_options,
+        selected_week_start=selected_week_start,
+        weekly_mode=(mode == "week"),
     )
 
 # -----------------------

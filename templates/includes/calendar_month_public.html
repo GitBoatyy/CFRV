@@ -1,0 +1,114 @@
+<div class="public-month">
+  <div class="public-month__header d-flex flex-wrap align-items-center justify-content-between gap-3">
+    <div class="btn-group" role="group" aria-label="Calendar navigation">
+      {% if prev_link %}
+        <a class="btn btn-outline-secondary" href="{{ prev_link }}">&lsaquo; Prev</a>
+      {% else %}
+        <button class="btn btn-outline-secondary" disabled>&lsaquo; Prev</button>
+      {% endif %}
+      <a class="btn btn-outline-secondary" href="{{ next_link }}">Next &rsaquo;</a>
+    </div>
+    <div class="public-month__picker">
+      <label class="visually-hidden" for="publicMonthPicker">Jump to month</label>
+      <input type="month"
+             id="publicMonthPicker"
+             class="form-control"
+             value="{{ '%04d-%02d'|format(year, month) }}"
+             data-jump-url="{{ jump_url }}">
+    </div>
+  </div>
+
+  <div class="public-month__grid mt-3">
+    {% for label in weekday_labels %}
+      <div class="public-month__weekday">{{ label }}</div>
+    {% endfor %}
+    {% for week in calendar_weeks %}
+      {% for day in week %}
+        {% set tooltip_lines = [] %}
+        {% if day.in_month %}
+          {% for g in day.groups %}
+            {% if g.name.lower().startswith('full') %}
+              {% set display_name = 'Full Service' %}
+            {% elif 'power' in g.name.lower() %}
+              {% set display_name = 'Power/Water' %}
+            {% else %}
+              {% set display_name = g.name %}
+            {% endif %}
+            {% set display_sites = g.free_sites %}
+            {% if g.name.lower().startswith('power') %}
+              {% set display_sites = [g.free_sites, 2]|min %}
+            {% endif %}
+            {% if display_sites < 0 %}
+              {% set display_sites = 0 %}
+            {% endif %}
+            {% if g.state == 'free' and g.free_sites > 0 %}
+              {% set nights_label = 'night' if g.max_run == 1 else 'nights' %}
+              {% if g.max_run > 14 %}
+                {% set stay_text = '>2 weeks' %}
+              {% else %}
+                {% set stay_text = (g.max_run if g.max_run else 0) ~ ' ' ~ nights_label %}
+              {% endif %}
+              {% set line = display_name ~ ' – ' ~ display_sites ~ ' ' ~ ('site' if display_sites == 1 else 'sites') ~ ', ' ~ stay_text %}
+            {% elif g.state == 'tentative' %}
+              {% set line = display_name ~ ' – limited (tentative holds)' %}
+            {% else %}
+              {% set line = display_name ~ ' – booked' %}
+            {% endif %}
+            {% set _ = tooltip_lines.append(line) %}
+          {% endfor %}
+        {% endif %}
+        <div class="public-month__day state-{{ day.state }} {% if not day.in_month %}is-out{% endif %}"
+             {% if day.in_month %}role="button" tabindex="0"{% endif %}>
+          <div class="public-month__date">{{ day.day }}</div>
+          {% if day.in_month %}
+          <div class="public-month__popover">
+            <div class="popover-content">
+              {% if tooltip_lines %}
+                {% for line in tooltip_lines %}
+                  <div class="popover-row">{{ line }}</div>
+                {% endfor %}
+              {% else %}
+                <div class="popover-row">No availability data</div>
+              {% endif %}
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    {% endfor %}
+  </div>
+  <div class="public-month__legend small mt-3 d-flex flex-wrap gap-3">
+    <span><span class="legend-swatch bg-free"></span> Available</span>
+    <span><span class="legend-swatch bg-limited"></span> Limited</span>
+    <span><span class="legend-swatch bg-booked"></span> Booked</span>
+  </div>
+</div>
+
+<script>
+(function(){
+  const picker = document.getElementById('publicMonthPicker');
+  if(picker){
+    picker.addEventListener('change', function(){
+      if(!this.value) return;
+      const [y, m] = this.value.split('-');
+      const target = this.dataset.jumpUrl || window.location.pathname;
+      const params = new URLSearchParams(window.location.search);
+      params.set('year', y);
+      params.set('month', parseInt(m, 10));
+      window.location = `${target}?${params.toString()}`;
+    });
+  }
+  const dayCells = document.querySelectorAll('.public-month__day[role="button"]');
+  dayCells.forEach(cell => {
+    cell.addEventListener('click', () => {
+      cell.classList.toggle('is-open');
+    });
+    cell.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        cell.click();
+      }
+    });
+  });
+})();
+</script>

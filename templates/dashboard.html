@@ -1,30 +1,110 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2>Reservations for {{ month_name }} {{ year }}</h2>
+<style>
+  .dashboard-toolbar {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    align-items: start;
+  }
+  .dashboard-toolbar .nav-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .dashboard-toolbar .dashboard-filter {
+    display: grid;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .dashboard-toolbar .dashboard-filter .switch-wrap {
+    min-width: 150px;
+  }
+  .dashboard-toolbar .dashboard-filter .month-wrap,
+  .dashboard-toolbar .dashboard-filter .week-wrap {
+    min-width: 200px;
+  }
+  .dashboard-toolbar .dashboard-filter .submit-wrap button {
+    width: 100%;
+  }
+  @media (min-width: 768px) {
+    .dashboard-toolbar .dashboard-filter {
+      grid-template-columns: auto minmax(0,1fr) minmax(0,1fr) auto;
+    }
+    .dashboard-toolbar .dashboard-filter .submit-wrap button {
+      width: auto;
+    }
+  }
+  .dashboard-toolbar .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .dashboard-toolbar .actions .btn {
+    flex: 1 1 150px;
+  }
+  @media (min-width: 768px) {
+    .dashboard-toolbar .actions .btn {
+      flex: 0 0 auto;
+    }
+  }
+</style>
 
-<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
-  <!-- Month navigator -->
-  <div class="btn-group me-2" role="group" aria-label="Month navigation">
-    <button id="prevBtn" type="button" class="btn btn-outline-secondary" onclick="goPrev()">‹ Prev</button>
-    <button type="button" class="btn btn-outline-secondary" onclick="goNext()">Next ›</button>
+<h2>{{ heading_label }}</h2>
+{% if weekly_mode and week_range_label %}
+  <p class="text-muted small mt-1">{{ week_range_label }}</p>
+{% endif %}
+
+<div class="dashboard-toolbar mb-3">
+  <div class="nav-group">
+    <button id="prevBtn" type="button" class="btn btn-outline-secondary" onclick="goPrev()" {% if prev_disabled %}disabled{% endif %}>‹ Prev</button>
+    <button id="nextBtn" type="button" class="btn btn-outline-secondary" onclick="goNext()">Next ›</button>
   </div>
 
-  <input type="month"
-         class="form-control"
-         style="max-width: 220px;"
-         id="jumpMonth"
-         value="{{ '%04d-%02d' % (year, month) }}"
-         onchange="jumpToMonth(this.value)">
+  <form id="viewForm" class="dashboard-filter" method="get" action="{{ url_for('dashboard') }}">
+    <input type="hidden" name="scope" id="scopeField" value="{{ 'week' if weekly_mode else 'month' }}">
 
-  <button class="btn btn-primary ms-2" onclick="newRes()">Add Reservation</button>
-  <button id="editToggleBtn" onclick="toggleEditMode()" class="btn btn-warning">Toggle Edit Mode</button>
-  <button id="optimizeBtn" onclick="optimizeSites()" class="btn btn-outline-primary">Optimize Layout</button>
-  <a href="{{ url_for('export_reservations', scope='month', year=year, month=month) }}" class="btn btn-success">Export</a>
+    <div class="switch-wrap">
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="weeklyToggle" {% if weekly_mode %}checked{% endif %}>
+        <label class="form-check-label" for="weeklyToggle">Weekly view</label>
+      </div>
+    </div>
+
+    <div class="month-wrap">
+      <input type="month" class="form-control" id="monthInput" name="month" value="{{ month_value }}" required>
+    </div>
+
+    <div class="week-wrap {{ 'stacked' if weekly_mode else '' }}">
+      <div id="weekPicker" class="{{ '' if weekly_mode else 'd-none' }}">
+        <select class="form-select" id="weekSelect" name="start" {% if not weekly_mode %}disabled{% endif %}>
+          {% if week_options %}
+            {% for opt in week_options %}
+              <option value="{{ opt.value }}" {% if selected_week_start == opt.value %}selected{% endif %}>{{ opt.label }} ({{ opt.range }})</option>
+            {% endfor %}
+          {% else %}
+            <option value="" disabled selected>No weeks available</option>
+          {% endif %}
+        </select>
+      </div>
+    </div>
+
+    <div class="submit-wrap">
+      <button type="submit" class="btn btn-outline-primary w-100">Load</button>
+    </div>
+  </form>
+
+  <div class="actions">
+    <button class="btn btn-primary" onclick="newRes()">Add Reservation</button>
+    <button id="editToggleBtn" onclick="toggleEditMode()" class="btn btn-warning">Toggle Edit Mode</button>
+    <button id="optimizeBtn" onclick="optimizeSites()" class="btn btn-outline-primary">Optimize Layout</button>
+    <a href="{{ export_link }}" class="btn btn-success">Export</a>
+  </div>
 </div>
 
 <div class="table-responsive">
-  <table class="table table-bordered table-sm align-middle" style="table-layout:fixed;width:100%;">
+  <table class="table table-bordered table-sm align-middle {{ 'week-mode' if weekly_mode else 'month-mode' }}" style="width:100%;{% if not weekly_mode %}table-layout:fixed;{% endif %}">
     <colgroup>
       <col style="width: 90px;">
       {% for d in days %}<col>{% endfor %}
@@ -32,14 +112,23 @@
     <thead>
       <tr>
         <th>Site</th>
-        {% for d in days %}<th>{{ d.day }}</th>{% endfor %}
+        {% for d in days %}
+          <th>
+            {% if weekly_mode %}
+              <div class="fw-semibold">{{ d.strftime('%a') }}</div>
+              <div class="small text-muted">{{ d.strftime('%b') }} {{ d.day }}</div>
+            {% else %}
+              {{ d.day }}
+            {% endif %}
+          </th>
+        {% endfor %}
       </tr>
     </thead>
     <tbody>
       {% for s in sites %}
       <tr data-siteid="{{ s[0] }}">
         <td class="fw-bold text-start px-2">{{ site_display[s[0]] }}</td>
-        {% set day_ns = namespace(day=1) %}
+        {% set day_ns = namespace(day=1, idx=0) %}
         {% for cell in grid[s[0]] %}
           {% if cell.type == 'res' %}
             {% set status = (cell.res.status or '').lower() %}
@@ -47,6 +136,7 @@
             {% set short_cell = cell.span < 3 %}
             {% set status_abbrev = 'C' if status == 'confirmed' else ('T' if status == 'tentative' else '?') %}
             {% set paid_abbrev = 'P' if paid == 'yes' else 'U' %}
+            {% set start_date = days[day_ns.idx] %}
             {% set tooltip_html = '<div class=\'text-start\'><strong>' ~ cell.res.guest ~ '</strong><br>' ~ cell.res.arrival ~ ' → ' ~ cell.res.departure %}
             {% set tooltip_html = tooltip_html ~ '<br>Site: ' ~ cell.res.site_id %}
             {% if cell.res.phone %}{% set tooltip_html = tooltip_html ~ '<br>Phone: ' ~ cell.res.phone %}{% endif %}
@@ -59,6 +149,8 @@
                 draggable="false"
                 data-day="{{ day_ns.day }}"
                 data-span="{{ cell.span }}"
+                data-date="{{ start_date.isoformat() }}"
+                data-index="{{ day_ns.idx }}"
                 data-res-id="{{ cell.res.id }}"
                 data-locked="{{ 1 if cell.res.site_locked else 0 }}"
                 data-res='{{ cell.res|tojson|escape }}'
@@ -75,11 +167,16 @@
               </div>
             </td>
             {% set day_ns.day = day_ns.day + cell.span %}
+            {% set day_ns.idx = day_ns.idx + cell.span %}
           {% else %}
+            {% set start_date = days[day_ns.idx] %}
             <td class="free"
                 data-day="{{ day_ns.day }}"
-                data-span="1"></td>
+                data-span="1"
+                data-date="{{ start_date.isoformat() }}"
+                data-index="{{ day_ns.idx }}"></td>
             {% set day_ns.day = day_ns.day + 1 %}
+            {% set day_ns.idx = day_ns.idx + 1 %}
           {% endif %}
         {% endfor %}
       </tr>
@@ -102,39 +199,73 @@
 </div>
 
 <script>
-/* ===== Month navigation ===== */
-const current = new Date();
-const curY = current.getFullYear();
-const curM = current.getMonth() + 1;
+/* ===== Period navigation & filters ===== */
+const weeklyMode = {{ 'true' if weekly_mode else 'false' }};
+const prevUrl = {{ prev_url|tojson }};
+const nextUrl = {{ next_url|tojson }};
+const dayDates = {{ day_iso_list|tojson }};
 
-const pageY = {{ year|int }};
-const pageM = {{ month|int }};
-
-function ymToQuery(y, m) { return `?year=${y}&month=${m}`; }
-function goTo(y, m) {
-  if (m < 1) { y -= 1; m = 12; }
-  if (m > 12) { y += 1; m = 1; }
-  if (y < curY || (y === curY && m < curM)) return;
-  window.location = ymToQuery(y, m);
-}
 function goPrev() {
-  let y = pageY, m = pageM - 1;
-  if (m < 1) { m = 12; y = pageY - 1; }
-  if (y < curY || (y === curY && m < curM)) return;
-  goTo(y, m);
+  if (!prevUrl) return;
+  window.location = prevUrl;
 }
+
 function goNext() {
-  let y = pageY, m = pageM + 1;
-  if (m > 12) { m = 1; y = pageY + 1; }
-  goTo(y, m);
+  if (!nextUrl) return;
+  window.location = nextUrl;
 }
-function jumpToMonth(val){
-  const [y,m] = val.split('-').map(v => parseInt(v, 10));
-  goTo(y, m);
-}
-window.addEventListener('DOMContentLoaded', () => {
-  const prevBtn = document.getElementById('prevBtn');
-  if ((pageY < curY) || (pageY === curY && pageM <= curM)) prevBtn.disabled = true;
+
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.getElementById('viewForm');
+  if (!form) return;
+  const weekToggle = document.getElementById('weeklyToggle');
+  const scopeField = document.getElementById('scopeField');
+  const weekPicker = document.getElementById('weekPicker');
+  const weekSelect = document.getElementById('weekSelect');
+  const monthInput = document.getElementById('monthInput');
+
+  function syncMode() {
+    const weekly = weekToggle && weekToggle.checked;
+    if (scopeField) scopeField.value = weekly ? 'week' : 'month';
+    if (weekPicker) weekPicker.classList.toggle('d-none', !weekly);
+    if (weekSelect) weekSelect.disabled = !weekly;
+  }
+
+  function submitForm() {
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit();
+    } else {
+      form.submit();
+    }
+  }
+
+  if (weekToggle) {
+    weekToggle.addEventListener('change', () => {
+      syncMode();
+      if (weekToggle.checked && weekSelect && !weekSelect.value && weekSelect.options.length) {
+        weekSelect.value = weekSelect.options[0].value;
+      }
+      submitForm();
+    });
+  }
+
+  if (monthInput) {
+    monthInput.addEventListener('change', () => {
+      if (weekToggle && weekToggle.checked && weekSelect && weekSelect.options.length) {
+        weekSelect.selectedIndex = 0;
+      }
+      submitForm();
+    });
+  }
+
+  if (weekSelect) {
+    weekSelect.addEventListener('change', submitForm);
+  }
+
+  syncMode();
+  if (weekToggle && weekToggle.checked) {
+    form.classList.add('weekly-active');
+  }
 });
 
 /* ===== Existing dashboard logic ===== */
@@ -192,40 +323,43 @@ function getCellSpan(cell){
   return parseInt(cell.getAttribute("data-span") || cell.colSpan || "1", 10);
 }
 
-function getCellDay(cell){
-  return parseInt(cell.getAttribute("data-day") || "0", 10);
+function getCellIndex(cell){
+  const raw = cell.getAttribute("data-index");
+  if (raw === null) return -1;
+  const idx = parseInt(raw, 10);
+  return Number.isNaN(idx) ? -1 : idx;
 }
 
-function computeStartDay(cell, event){
-  const baseDay = getCellDay(cell);
-  if(!baseDay) return 0;
+function computeStartIndex(cell, event){
+  const baseIndex = getCellIndex(cell);
+  if(baseIndex < 0) return null;
   const span = getCellSpan(cell);
   if(span <= 1 || !event){
-    return baseDay;
+    return baseIndex;
   }
   const rect = cell.getBoundingClientRect();
-  if(!rect.width) return baseDay;
+  if(!rect.width) return baseIndex;
   const posX = Math.min(Math.max(event.clientX - rect.left, 0), rect.width);
   const ratio = posX / rect.width;
   const offset = Math.min(span - 1, Math.floor(ratio * span));
-  return baseDay + offset;
+  return baseIndex + offset;
 }
 
-function cellsForRange(row, startDay, duration){
-  if(!row || !startDay || duration < 1) return [];
-  const endDay = startDay + duration - 1;
+function cellsForRange(row, startIndex, duration){
+  if(!row || startIndex === null || startIndex < 0 || duration < 1) return [];
+  const endIndex = startIndex + duration - 1;
   const dayCells = Array.from(row.querySelectorAll("td")).slice(1);
   return dayCells.filter(td => {
-    const cStart = getCellDay(td);
-    if(!cStart) return false;
+    const cStart = getCellIndex(td);
+    if(cStart < 0) return false;
     const cEnd = cStart + getCellSpan(td) - 1;
-    return !(endDay < cStart || startDay > cEnd);
+    return !(endIndex < cStart || startIndex > cEnd);
   });
 }
 
-function highlightRange(row, startDay){
+function highlightRange(row, startIndex){
   clearHighlights();
-  cellsForRange(row, startDay, dragDuration).forEach(td => td.classList.add("drag-hover"));
+  cellsForRange(row, startIndex, dragDuration).forEach(td => td.classList.add("drag-hover"));
 }
 
 function registerDropTargets(resId){
@@ -270,9 +404,9 @@ function dragOver(ev){
   const cell = ev.target.closest("td");
   const row = cell ? cell.closest("tr") : null;
   if(!cell || !row) return;
-  const startDay = computeStartDay(cell, ev);
-  if(!startDay) return;
-  highlightRange(row, startDay);
+  const startIndex = computeStartIndex(cell, ev);
+  if(startIndex === null || startIndex < 0) return;
+  highlightRange(row, startIndex);
 }
 
 function dragLeave(ev){
@@ -294,15 +428,16 @@ async function drop(ev){
 
   const res = JSON.parse(ev.dataTransfer.getData("res"));
   const site_id = row.getAttribute("data-siteid");
-  const startDay = computeStartDay(cell, ev);
-  if(!startDay) return;
+  const startIndex = computeStartIndex(cell, ev);
+  if(startIndex === null || startIndex < 0 || startIndex >= dayDates.length) return;
 
   dragEnd();
 
-  const year = {{ year|int }};
-  const month = {{ month|int }};
-  const arrival = new Date(year, month-1, startDay);
-  const departure = new Date(year, month-1, startDay + dragDuration);
+  const baseIso = dayDates[startIndex];
+  const arrival = new Date(baseIso);
+  if(Number.isNaN(arrival.getTime())) return;
+  const departure = new Date(arrival);
+  departure.setDate(departure.getDate() + dragDuration);
 
   const fmt = d => d.toISOString().split('T')[0];
   const data = { id: res.id, site_id: site_id, arrival: fmt(arrival), departure: fmt(departure) };

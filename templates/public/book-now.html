@@ -1,0 +1,155 @@
+{% extends 'public/base.html' %}
+{% block title %}Book Now – Canyon Farms RV Park{% endblock %}
+{% block content %}
+<section class="book-hero">
+  <div class="container-xl py-5 book-stack">
+    <div class="book-grid">
+      <div class="calendar-card">
+        <div class="book-grid__intro text-light mb-3">
+        </div>
+        {% with year=availability_context.year,
+                month=availability_context.month,
+                calendar_weeks=availability_context.calendar_weeks,
+                weekday_labels=availability_context.weekday_labels,
+                prev_link=availability_context.prev_link,
+                next_link=availability_context.next_link,
+                jump_url=availability_context.jump_url %}
+          {% include 'includes/calendar_month_public.html' %}
+        {% endwith %}
+      </div>
+
+      <div class="request-card p-4">
+        <h2 class="text-light mb-3">Request a Reservation</h2>
+        <p class="text-light-50 mb-4">Share a few details and we will prepare your booking. Submitting will open an email with everything filled in for you to send.</p>
+        <form id="reservationRequest" class="reservation-form row g-3">
+          <div class="col-md-6">
+            <label class="form-label text-light" for="rrName">Full Name</label>
+            <input type="text" class="form-control" id="rrName" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-light" for="rrEmail">Email</label>
+            <input type="email" class="form-control" id="rrEmail" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-light" for="rrPhone">Phone</label>
+            <input type="tel" class="form-control" id="rrPhone" placeholder="X-XXX-XXX-XXXX">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-light" for="rrArrival">Arrival</label>
+            <input type="date" class="form-control" id="rrArrival" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label text-light" for="rrAdults">Adults</label>
+            <input type="number" min="0" class="form-control" id="rrAdults" placeholder="2">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label text-light" for="rrChildren">Children</label>
+            <input type="number" min="0" class="form-control" id="rrChildren" placeholder="0">
+          </div>
+                    <div class="col-md-6">
+            <label class="form-label text-light" for="rrDeparture">Departure</label>
+            <input type="date" class="form-control" id="rrDeparture" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-light" for="rrRig">RV Size</label>
+            <input type="text" class="form-control" id="rrRig" placeholder="Length / Type">
+          </div>
+          <div class="col-12">
+            <label class="form-label text-light" for="rrNotes">Notes</label>
+            <textarea id="rrNotes" class="form-control" rows="3" placeholder="Share site preferences, pets, or other details."></textarea>
+          </div>
+          <div class="col-12 d-grid">
+            <button type="submit" class="btn btn-warning text-dark fw-semibold">Start Email Request</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="rates-wide">
+      <div class="rates-card">
+        <h2 class="mb-2 text-warning fw-bold">2025 Rates</h2>
+        <div class="season">
+          <h3 class="seasontitle">Low Season</h3>
+          <p>April 1 – May 31 &amp; September 2 – October 31</p>
+          <p>$59 per night / $375 per week</p>
+          <p>$1,200 per month</p>
+        </div>
+        <div class="season">
+          <h3 class="seasontitle">High Season</h3>
+          <p>June 1 – September 1</p>
+          <p>$74 per night / $475 per week</p>
+        </div>
+        <div class="rules mt-4">
+          <p class="subrulet2">Maximum 4 adults per site.</p>
+          <p class="subrulet1">Prices do not include 5% tax.</p>
+          <p class="policy">Deposits</p>
+          <ul class="deposit-list text-light-50">
+            <li>1–3 nights: full payment required at booking.</li>
+            <li>4–13 nights: 3 night deposit.</li>
+            <li>14+ nights: 1 week deposit.</li>
+          </ul>
+          <p class="policy">Cancellation Policy</p>
+          <p class="subrulet3 mb-0">We require cancellation notice no later than 14 days prior to your planned arrival date. Deposits are refundable less a $25 administration fee when the policy is met.</p>
+        </div>
+      </div>
+    </div>
+    <div>
+      <h3> </h3>
+      <h3> </h3>
+    </div>
+
+    <div class="contactus text-center mb-5">
+      <h3 class="text-warning mb-3">Contact Us</h3>
+      <p class="mb-1">Phone: <a href="tel:12508011969">1-250-801-1969</a></p>
+      <p><a href="mailto:Lesley@canyonfarmsrv.com">Lesley@canyonfarmsrv.com</a></p>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+(function(){
+  const form = document.getElementById('reservationRequest');
+  if(!form) return;
+  form.addEventListener('submit', function(ev){
+    ev.preventDefault();
+    const fields = {
+      name: document.getElementById('rrName').value.trim(),
+      email: document.getElementById('rrEmail').value.trim(),
+      phone: document.getElementById('rrPhone').value.trim(),
+      arrival: document.getElementById('rrArrival').value,
+      departure: document.getElementById('rrDeparture').value,
+      adults: document.getElementById('rrAdults').value.trim(),
+      children: document.getElementById('rrChildren').value.trim(),
+      rig: document.getElementById('rrRig').value.trim(),
+      notes: document.getElementById('rrNotes').value.trim(),
+    };
+
+    if(!fields.name || !fields.email || !fields.arrival || !fields.departure){
+      alert('Please complete your name, email, and stay dates.');
+      return;
+    }
+
+    const subject = encodeURIComponent(`Reservation Request: ${fields.arrival} to ${fields.departure}`);
+    const bodyLines = [
+      `Guest: ${fields.name}`,
+      `Email: ${fields.email}`,
+      fields.phone ? `Phone: ${fields.phone}` : '',
+      `Arrival: ${fields.arrival}`,
+      `Departure: ${fields.departure}`,
+      fields.adults ? `Adults: ${fields.adults}` : '',
+      fields.children ? `Children: ${fields.children}` : '',
+      fields.rig ? `RV Size: ${fields.rig}` : '',
+      '',
+      'Notes:',
+      fields.notes || '(none)'
+    ].filter(Boolean);
+
+    const mailto = `mailto:Lesley@canyonfarmsrv.com?subject=${subject}&body=${encodeURIComponent(bodyLines.join('\n'))}`;
+    window.location.href = mailto;
+  });
+})();
+</script>
+{% endblock %}

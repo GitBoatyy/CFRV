@@ -16,7 +16,41 @@
     }
     .export-grid th:first-child, .export-grid td:first-child { width: 80px; }
     .export-grid th:not(:first-child), .export-grid td:not(:first-child) { width: 28px; }
+    body.weekly-mode .export-grid {
+      table-layout: auto;
+      width: 100%;
+      max-width: none;
+    }
+    body.weekly-mode .export-grid th:first-child,
+    body.weekly-mode .export-grid td:first-child {
+      width: 120px;
+      max-width: 120px;
+    }
+    body.weekly-mode .export-grid th:not(:first-child),
+    body.weekly-mode .export-grid td:not(:first-child) {
+      min-width: 80px;
+      white-space: nowrap;
+    }
+    body.weekly-mode .table-responsive {
+      overflow-x: auto;
+    }
 
+    #periodForm.weekly-active {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+    #periodForm.weekly-active > * {
+      width: 100%;
+    }
+    #periodForm.weekly-active .form-check {
+      width: auto;
+    }
+    #periodForm.weekly-active select,
+    #periodForm.weekly-active input[type="month"] {
+      width: 100% !important;
+    }
+  
     td.free { background:#d4edda; height:32px; }
     td.res-block { background:#cce5ff !important; color:#000; border:1px solid #495057; vertical-align:middle; }
     td.res-block.status-confirmed { background:#b6d4fe !important; }
@@ -39,14 +73,42 @@
     .page-break { page-break-after: always; }
   </style>
 </head>
-<body>
+<body class="{{ 'weekly-mode' if weekly_mode else '' }}">
 <div class="container-fluid">
 
-  <div class="no-print d-flex justify-content-between align-items-center">
+  <div class="no-print d-flex flex-wrap align-items-center gap-3">
     <div class="d-flex gap-2">
       <button class="btn btn-primary" onclick="window.print()">Print</button>
       <a href="{{ url_for('dashboard', year=year, month=month) }}" class="btn btn-secondary">Back</a>
     </div>
+
+    <form id="periodForm" class="d-flex align-items-center gap-2 flex-wrap" method="get" action="{{ url_for('export_reservations') }}">
+      <input type="hidden" name="scope" id="scopeField" value="{{ 'week' if weekly_mode else 'month' }}">
+      <input type="hidden" name="year" value="{{ year }}">
+
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="weeklyToggle" {% if weekly_mode %}checked{% endif %}>
+        <label class="form-check-label" for="weeklyToggle">Weekly export</label>
+      </div>
+
+      <div id="monthPicker" class="{{ 'd-none' if weekly_mode else '' }}">
+        <input type="month" class="form-control" id="monthInput" name="month" style="width: 180px" value="{{ month_value }}" required>
+      </div>
+
+      <div id="weekPicker" class="{{ '' if weekly_mode else 'd-none' }}" style="min-width: 260px;">
+        <select class="form-select" id="weekSelect" name="start">
+          {% if week_options %}
+            {% for opt in week_options %}
+              <option value="{{ opt.value }}" {% if selected_week_start == opt.value %}selected{% endif %}>{{ opt.label }} ({{ opt.range }})</option>
+            {% endfor %}
+          {% else %}
+            <option value="" disabled selected>No weeks found</option>
+          {% endif %}
+        </select>
+      </div>
+
+      <button type="submit" class="btn btn-outline-primary">Load</button>
+    </form>
 
     <form class="d-flex align-items-center gap-2" method="get" action="{{ url_for('export_reservations') }}">
       <input type="hidden" name="scope" value="range">
@@ -140,5 +202,57 @@
   {% endfor %}
 
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const form = document.getElementById('periodForm');
+  if (!form) return;
+  const weekToggle = document.getElementById('weeklyToggle');
+  const scopeField = document.getElementById('scopeField');
+  const monthPicker = document.getElementById('monthPicker');
+  const weekPicker = document.getElementById('weekPicker');
+  const monthInput = document.getElementById('monthInput');
+  const weekSelect = document.getElementById('weekSelect');
+
+  function submitForm() {
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit();
+    } else {
+      form.submit();
+    }
+  }
+
+  function syncMode() {
+    const weekly = weekToggle && weekToggle.checked;
+    if (scopeField) scopeField.value = weekly ? 'week' : 'month';
+    if (monthPicker) monthPicker.classList.toggle('d-none', weekly);
+    if (weekPicker) weekPicker.classList.toggle('d-none', !weekly);
+    if (form) form.classList.toggle('weekly-active', weekly);
+  }
+
+  if (weekToggle) {
+    weekToggle.addEventListener('change', function () {
+      syncMode();
+      if (weekToggle.checked && weekSelect && !weekSelect.value && weekSelect.options.length) {
+        weekSelect.value = weekSelect.options[0].value;
+      }
+      submitForm();
+    });
+  }
+
+  if (monthInput) {
+    monthInput.addEventListener('change', submitForm);
+  }
+
+  if (weekSelect) {
+    weekSelect.addEventListener('change', submitForm);
+  }
+
+  syncMode();
+  if (weekToggle && weekToggle.checked && form) {
+    form.classList.add('weekly-active');
+  }
+});
+</script>
 </body>
 </html>

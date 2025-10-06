@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Export Reservations</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #fff; }
+    .no-print { margin-bottom: 20px; }
+    @media print { .no-print { display:none; } }
+
+    .export-grid { table-layout: fixed; width: 100%; border-collapse: collapse; }
+    .export-grid th, .export-grid td {
+      border: 1px solid #dee2e6; text-align: center; padding: 2px;
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+      font-size: 12px;
+    }
+    .export-grid th:first-child, .export-grid td:first-child { width: 80px; }
+    .export-grid th:not(:first-child), .export-grid td:not(:first-child) { width: 28px; }
+    body.weekly-mode .export-grid { max-width: 960px; margin: 0 auto; }
+    body.weekly-mode .export-grid th:first-child,
+    body.weekly-mode .export-grid td:first-child {
+      width: 110px;
+      max-width: 110px;
+    }
+
+    td.free { background:#d4edda; height:32px; }
+    td.res-block { background:#cce5ff !important; color:#000; border:1px solid #495057; vertical-align:middle; }
+    td.res-block.status-confirmed { background:#b6d4fe !important; }
+    td.res-block.status-tentative { background:#ffe69c !important; }
+    td.res-block.paid-no { border:2px dashed #dc3545; }
+    td.res-block.paid-yes { border:1px solid #0f5132; }
+    .table.table-sm td, .table.table-sm th {
+      font-size: 0.9rem;
+    }
+
+    /* Notes wrap without collapsing layout */
+    td.notes-col, th.notes-col {
+      max-width: 240px;
+      white-space: normal;
+      word-wrap: break-word;
+      word-break: break-word;
+    }
+
+    .month-title { margin: 12px 0; }
+    .page-break { page-break-after: always; }
+  </style>
+</head>
+<body class="{{ 'weekly-mode' if weekly_mode else '' }}">
+<div class="container-fluid">
+
+  <div class="no-print d-flex flex-wrap align-items-center gap-3">
+    <div class="d-flex gap-2">
+      <button class="btn btn-primary" onclick="window.print()">Print</button>
+      <a href="{{ url_for('dashboard', year=year, month=month) }}" class="btn btn-secondary">Back</a>
+    </div>
+
+    <form id="periodForm" class="d-flex align-items-center gap-2 flex-wrap" method="get" action="{{ url_for('export_reservations') }}">
+      <input type="hidden" name="scope" id="scopeField" value="{{ 'week' if weekly_mode else 'month' }}">
+      <input type="hidden" name="year" value="{{ year }}">
+
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="weeklyToggle" {% if weekly_mode %}checked{% endif %}>
+        <label class="form-check-label" for="weeklyToggle">Weekly export</label>
+      </div>
+
+      <div id="monthPicker" class="{{ 'd-none' if weekly_mode else '' }}">
+        <input type="month" class="form-control" id="monthInput" name="month" style="width: 180px" value="{{ month_value }}" required>
+      </div>
+
+      <div id="weekPicker" class="{{ '' if weekly_mode else 'd-none' }}" style="min-width: 260px;">
+        <select class="form-select" id="weekSelect" name="start">
+          {% if week_options %}
+            {% for opt in week_options %}
+              <option value="{{ opt.value }}" {% if selected_week_start == opt.value %}selected{% endif %}>{{ opt.label }} ({{ opt.range }})</option>
+            {% endfor %}
+          {% else %}
+            <option value="" disabled selected>No weeks found</option>
+          {% endif %}
+        </select>
+      </div>
+
+      <button type="submit" class="btn btn-outline-primary">Load</button>
+    </form>
+
+    <form class="d-flex align-items-center gap-2" method="get" action="{{ url_for('export_reservations') }}">
+      <input type="hidden" name="scope" value="range">
+      <label class="mb-0">From</label>
+      <input type="month" name="from" class="form-control" style="width: 170px" value="{{ form_from_value }}" required>
+      <label class="mb-0">To</label>
+      <input type="month" name="to" class="form-control" style="width: 170px" value="{{ form_to_value }}" required>
+      <button class="btn btn-outline-primary">Export Range</button>
+    </form>
+  </div>
+
+  {% for section in sections %}
+    <h4 class="month-title">Reservations – {{ section.month_label }} {{ section.year }}</h4>
+
+    <div class="table-responsive">
+      <table class="export-grid">
+        <tr>
+          <th>Site</th>
+          {% for d in section.days %}
+            <th>{{ d.day }}</th>
+          {% endfor %}
+        </tr>
+        {% for s in sites %}
+        <tr>
+          <td class="fw-bold" title="{{ s[1] }}">{{ site_short_lookup[s[0]] }}</td>
+          {% for cell in section.grid[s[0]] %}
+            {% if cell.type == 'res' %}
+              {% set status = (cell.res.status or '').lower() %}
+              {% set paid = (cell.res.paid or 'no').lower() %}
+              <td class="res-block status-{{ status if status else 'unknown' }} paid-{{ 'yes' if paid == 'yes' else 'no' }}" colspan="{{ cell.span }}">
+                {{ cell.res.guest.rsplit(' ', 1)[-1] }}{% if cell.res.site_locked %} [L]{% endif %}
+              </td>
+            {% else %}
+              <td class="free"></td>
+            {% endif %}
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+
+    <h5 class="mt-4">Reservation Details</h5>
+    <table class="table table-bordered table-sm">
+      <tr>
+        <th>Site</th>
+        <th>Guest</th>
+        <th>Phone</th>
+        <th>Email</th>
+        <th>Arrival</th>
+        <th>Departure</th>
+        <th>Status</th>
+        <th>Size</th>
+        <th>Adults</th>
+        <th>Children</th>
+        <th>Paid</th>
+        <th>Locked</th>
+        <th class="notes-col">Notes</th>
+      </tr>
+      {% for r in section.all_res_list|sort(attribute='site_id') %}
+      <tr>
+        <td title="{{ site_lookup.get(r.site_id, 'Unknown') }}">{{ site_short_lookup.get(r.site_id, 'Unknown') }}</td>
+        <td>{{ r.guest }}</td>
+        <td>{{ r.phone }}</td>
+        <td>{{ r.email }}</td>
+        <td>{{ r.arrival }}</td>
+        <td>{{ r.departure }}</td>
+        <td>
+          {% if r.status %}
+            <span class="badge {{ 'bg-primary' if r.status.lower() == 'confirmed' else 'bg-warning text-dark' }}">{{ r.status|capitalize }}</span>
+          {% else %}
+            <span class="badge bg-secondary">N/A</span>
+          {% endif %}
+        </td>
+        <td>{{ r.rv_size }}</td>
+        <td>{{ r.num_adults or 0 }}</td>
+        <td>{{ r.num_children or 0 }}</td>
+        <td>
+          {% if r.paid and r.paid.lower() == 'yes' %}
+            <span class="badge bg-success">Paid</span>
+          {% else %}
+            <span class="badge bg-danger">Unpaid</span>
+          {% endif %}
+        </td>
+        <td>{{ 'Yes' if r.site_locked else 'No' }}</td>
+        <td class="notes-col">{{ r.notes }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+
+    {% if not loop.last %}<div class="page-break"></div>{% endif %}
+  {% endfor %}
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const form = document.getElementById('periodForm');
+  if (!form) return;
+  const weekToggle = document.getElementById('weeklyToggle');
+  const scopeField = document.getElementById('scopeField');
+  const monthPicker = document.getElementById('monthPicker');
+  const weekPicker = document.getElementById('weekPicker');
+  const monthInput = document.getElementById('monthInput');
+  const weekSelect = document.getElementById('weekSelect');
+
+  function submitForm() {
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit();
+    } else {
+      form.submit();
+    }
+  }
+
+  function syncMode() {
+    const weekly = weekToggle && weekToggle.checked;
+    if (scopeField) scopeField.value = weekly ? 'week' : 'month';
+    if (monthPicker) monthPicker.classList.toggle('d-none', weekly);
+    if (weekPicker) weekPicker.classList.toggle('d-none', !weekly);
+  }
+
+  if (weekToggle) {
+    weekToggle.addEventListener('change', function () {
+      syncMode();
+      if (weekToggle.checked && weekSelect && !weekSelect.value && weekSelect.options.length) {
+        weekSelect.value = weekSelect.options[0].value;
+      }
+      submitForm();
+    });
+  }
+
+  if (monthInput) {
+    monthInput.addEventListener('change', submitForm);
+  }
+
+  if (weekSelect) {
+    weekSelect.addEventListener('change', submitForm);
+  }
+
+  syncMode();
+});
+</script>
+</body>
+</html>

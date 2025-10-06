@@ -1,0 +1,185 @@
+<style>
+.availability-module {
+  background: linear-gradient(180deg, rgba(17,24,39,0.92) 0%, rgba(17,24,39,0.78) 100%);
+  color: #f8fafc;
+  border-radius: 18px;
+  padding: 1.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.25);
+}
+.availability-module--light {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: rgba(15, 23, 42, 0.12);
+  box-shadow: none;
+}
+.availability-module--light .btn {
+  border-color: rgba(71, 85, 105, 0.4);
+  color: #0f172a;
+}
+.availability-module--light .btn:hover {
+  background: rgba(30, 64, 175, 0.08);
+}
+.availability-table-wrap {
+  border-radius: 12px;
+  overflow: hidden;
+}
+.availability-table {
+  table-layout: fixed;
+  width: 100%;
+  margin-bottom: 0;
+}
+.availability-table th:first-child,
+.availability-table td:first-child {
+  width: 160px;
+  max-width: 160px;
+  white-space: normal;
+}
+.availability-table td,
+.availability-table th {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0.45rem 0.25rem;
+}
+.availability-tooltip {
+  position: relative;
+  cursor: pointer;
+}
+.availability-pill {
+  display: inline-flex;
+  min-width: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(15,23,42,0.55);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+}
+.availability-module--light .availability-pill {
+  background: rgba(15,23,42,0.1);
+  color: #0f172a;
+}
+.status-free {
+  background: #1f9d55 !important;
+}
+.status-confirmed {
+  background: #dc3545 !important;
+}
+.status-tentative {
+  background: #f59e0b !important;
+}
+.availability-module--light .status-free {
+  background: #22c55e !important;
+}
+.availability-module--light .availability-hint {
+  color: #475569 !important;
+}
+.availability-nav .btn {
+  min-width: 110px;
+}
+.availability-month-picker .form-control {
+  min-width: 200px;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+</style>
+
+<div class="availability-module {{ extra_classes|default('') }}">
+  <div class="availability-nav d-flex flex-wrap align-items-center justify-content-between gap-3">
+    <div class="btn-group" role="group" aria-label="Availability navigation">
+      {% if prev_link %}
+        <a class="btn btn-outline-secondary" href="{{ prev_link }}">&lsaquo; Prev</a>
+      {% else %}
+        <button class="btn btn-outline-secondary" disabled>&lsaquo; Prev</button>
+      {% endif %}
+      <a class="btn btn-outline-secondary" href="{{ next_link }}">Next &rsaquo;</a>
+    </div>
+    <div class="availability-month-picker">
+      <label class="visually-hidden" for="availabilityMonth">Jump to month</label>
+      <input type="month"
+             id="availabilityMonth"
+             class="form-control"
+             value="{{ '%04d-%02d'|format(year, month) }}"
+             data-jump-url="{{ jump_url }}">
+    </div>
+  </div>
+
+  <div class="table-responsive availability-table-wrap mt-3">
+    <table class="table table-bordered table-sm align-middle text-center availability-table">
+      <thead>
+        <tr>
+          <th scope="col">Site</th>
+          {% for d in days %}
+            <th scope="col">{{ d.day }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for group in group_rows %}
+        <tr>
+          <th scope="row">{{ group.name }}</th>
+          {% for cell in group.cells %}
+            {% set state = cell.state %}
+            {% if state == 'confirmed' %}
+              <td class="status-confirmed" aria-label="Booked"></td>
+            {% elif state == 'tentative' %}
+              <td class="status-tentative" aria-label="Tentative"></td>
+            {% else %}
+              {% set display_run = cell.max_run %}
+              {% if cell.capped %}
+                {% set stay_label = 'More than 14 nights' %}
+                {% set run_display = '&gt;14' %}
+              {% else %}
+                {% set nights_label = 'night' if display_run == 1 else 'nights' %}
+                {% set stay_label = display_run ~ ' ' ~ nights_label %}
+                {% set run_display = display_run %}
+              {% endif %}
+              {% set open_pads = cell.free_sites %}
+              {% set tooltip_html = '<strong>Open Pads:</strong> ' ~ open_pads ~ '<br><strong>Max consecutive stay:</strong> ' ~ stay_label %}
+              <td class="status-free availability-tooltip"
+                  data-bs-toggle="tooltip"
+                  data-bs-html="true"
+                  title="{{ tooltip_html }}">
+                <span class="availability-pill">{{ run_display | safe }}</span>
+              </td>
+            {% endif %}
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <p class="availability-hint text-muted small mb-0">Hover over a green day to see how many pads are open and the longest stay that fits without moving.</p>
+</div>
+
+<script>
+(function(){
+  const picker = document.getElementById('availabilityMonth');
+  if(!picker) return;
+  picker.addEventListener('change', function(){
+    if(!this.value) return;
+    const [y, m] = this.value.split('-');
+    const target = this.dataset.jumpUrl || window.location.pathname;
+    const params = new URLSearchParams(window.location.search);
+    params.set('year', y);
+    params.set('month', parseInt(m, 10));
+    window.location = `${target}?${params.toString()}`;
+  });
+
+  const tooltipEls = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+  tooltipEls.forEach(el => new bootstrap.Tooltip(el));
+})();
+</script>

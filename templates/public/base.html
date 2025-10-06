@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Canyon Farms RV Park{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='public/css/site.css') }}">
+  {% block head_extra %}{% endblock %}
+</head>
+<body class="public-body" style="background:url({{ url_for('static', filename='public/images/Background3.png') }}) center top/cover fixed no-repeat;">
+  <div class="public-shell">
+    <header class="header">
+      <div class="headertl">
+        <a href="{{ url_for('public_home') }}" class="logo-link">
+          <img src="{{ url_for('static', filename='public/images/camper.png') }}" alt="Canyon Farms RV Park logo" class="logo-img">
+        </a>
+        <div class="linktl"><a href="{{ url_for('public_home') }}">Return Home</a></div>
+      </div>
+      <nav class="links">
+        <div class="link"><a href="{{ url_for('public_book_now') }}">Book Now</a></div>
+        <div class="link"><a href="https://www.tripadvisor.ca/Hotel_Review-g154933-d3359567-Reviews-Canyon_Farms_RV_Park-Kelowna_Okanagan_Valley_British_Columbia.html" target="_blank" rel="noopener">TripAdvisor</a></div>
+        <div class="link"><a href="{{ url_for('public_pictures') }}">Pictures</a></div>
+        <div class="link"><a href="{{ url_for('public_about') }}">About Us</a></div>
+      </nav>
+    </header>
+    
+    <main class="public-main">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+      <a href="https://www.tripadvisor.ca/Hotel_Review-g154933-d3359567-Reviews-Canyon_Farms_RV_Park-Kelowna_Okanagan_Valley_British_Columbia.html" target="_blank" rel="noopener">
+        <img src="{{ url_for('static', filename='public/images/tripadvisor.png') }}" alt="TripAdvisor" class="footer-icon">
+      </a>
+      <a href="https://www.google.com/search?q=canyon+farms+rv+park" target="_blank" rel="noopener">
+        <img src="{{ url_for('static', filename='public/images/google.png') }}" alt="Google" class="footer-icon">
+      </a>
+      <div class="bookbutton">
+        <a href="{{ url_for('public_book_now') }}" class="text-dark fw-semibold">Check Availability</a>
+      </div>
+      <a href="https://www.facebook.com/CanyonFarmsRV/" target="_blank" rel="noopener">
+        <img src="{{ url_for('static', filename='public/images/facebook.png') }}" alt="Facebook" class="footer-icon">
+      </a>
+      <a href="https://www.instagram.com/canyonfarmsrv/" target="_blank" rel="noopener">
+        <img src="{{ url_for('static', filename='public/images/instagram.png') }}" alt="Instagram" class="footer-icon">
+      </a>
+    </footer>
+    <a href="{{ url_for('dashboard') }}" class="staff-login-link" aria-label="Staff login access"></a>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

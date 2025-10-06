@@ -108,7 +108,7 @@
 <body class="bg-light">
 <nav class="navbar navbar-dark bg-dark mb-3">
   <div class="container-fluid">
-    <a class="navbar-brand" href="{{ url_for('availability') }}">Canyon Farms RV</a>
+    <a class="navbar-brand" href="{{ url_for('public_home') }}">Canyon Farms RV</a>
     <div>
       {% if session.get('user_id') %}
         <a class="btn btn-outline-light btn-sm" href="{{ url_for('dashboard') }}">Dashboard</a>
