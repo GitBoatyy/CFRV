@@ -1,0 +1,122 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 612 792] >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj
+4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+5 0 obj << /Length 2879 >> stream
+BT
+/F1 18 Tf
+22 TL
+72 760 Td
+(Canyon Farms RV Staff Guide) Tj
+/F1 12 Tf
+16 TL
+T*
+() Tj
+T*
+(1. Access & Login) Tj
+T*
+(- Visit /login and use your staff credentials \(admin/admin by default\).) Tj
+T*
+(- Log out from the navbar when you finish your session.) Tj
+T*
+() Tj
+T*
+(2. Availability Overview) Tj
+T*
+(- The grid shows two site groups: Full Hookup \(Sites 1-8\) and Power / Water \(Sites 9-10, Dahlia East, Dahlia West\).) Tj
+T*
+(- Green cells display available sites plus max continuous nights \(e.g., 2 / 3d\).) Tj
+T*
+(- Hover a green cell to see which sites are open and the longest stay before moving.) Tj
+T*
+(- Yellow = tentative holds, Red = confirmed bookings for that group.) Tj
+T*
+() Tj
+T*
+(3. Creating Reservations) Tj
+T*
+(- Use the Dashboard 'Add Reservation' button.) Tj
+T*
+(- Choose 'Auto Assign' to let the system pick a site; it will optimize existing bookings if needed.) Tj
+T*
+(- If a guest requests a specific pad, select it manually. The system will attempt to optimize around their stay.) Tj
+T*
+(- Locked reservations \(toggle in the form\) will never move during optimization.) Tj
+T*
+(- You will see warnings when auto-assignment or optimization adjusts other bookings.) Tj
+T*
+(- If no single pad can host the full stay you will be prompted to discuss splitting the stay.) Tj
+T*
+() Tj
+T*
+(4. Editing Reservations) Tj
+T*
+(- Click a reservation in the Dashboard to view details, then choose Edit.) Tj
+T*
+(- Date or site changes trigger the same availability and optimization checks as new bookings.) Tj
+T*
+(- Locked reservations cannot be dragged to another site but dates may still be updated.) Tj
+T*
+() Tj
+T*
+(5. Drag-and-Drop) Tj
+T*
+(- Toggle Edit Mode to enable dragging reservations to new dates or pads.) Tj
+T*
+(- Yellow preview = valid, Red preview = blocked. Locked stays refuse cross-site moves.) Tj
+T*
+() Tj
+T*
+(6. Auto Slot Logic) Tj
+T*
+(- The system first looks for an open pad for the entire stay.) Tj
+T*
+(- If none exist, it automatically runs the optimizer to free space when possible.) Tj
+T*
+(- You will be warned when other bookings were moved or when only split availability remains.) Tj
+T*
+() Tj
+T*
+(7. Exporting) Tj
+T*
+(- Use the Dashboard 'Export' button to open the printable view.) Tj
+T*
+(- Select a month range to download; reservations are sorted Site 1-10, then Dahlia East/West.) Tj
+T*
+(- Status and payment badges mirror the Dashboard \(yellow=tentative, blue=confirmed, red dashed=unpaid\).) Tj
+T*
+() Tj
+T*
+(8. Availability Tips) Tj
+T*
+(- Prefer Auto Assign to keep pads consolidated; rerun Optimize when you reshuffle manually.) Tj
+T*
+(- Warn guests about potential split stays if the tooltip shows only short continuous availability.) Tj
+T*
+() Tj
+T*
+(Support) Tj
+T*
+(- Contact the operations lead or system administrator for access issues or major schedule conflicts.) Tj
+T*
+() Tj
+T*
+(Generated on October 05, 2025.) Tj
+T*
+ET
+endstream endobj
+xref
+0 6
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000145 00000 n 
+0000000247 00000 n 
+0000000317 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+3247
+%%EOF
