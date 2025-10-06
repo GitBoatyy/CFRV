@@ -12,12 +12,20 @@
     .export-grid th, .export-grid td {
       border: 1px solid #dee2e6; text-align: center; padding: 2px;
       overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+      font-size: 12px;
     }
     .export-grid th:first-child, .export-grid td:first-child { width: 80px; }
     .export-grid th:not(:first-child), .export-grid td:not(:first-child) { width: 28px; }
 
     td.free { background:#d4edda; height:32px; }
     td.res-block { background:#cce5ff !important; color:#000; border:1px solid #495057; vertical-align:middle; }
+    td.res-block.status-confirmed { background:#b6d4fe !important; }
+    td.res-block.status-tentative { background:#ffe69c !important; }
+    td.res-block.paid-no { border:2px dashed #dc3545; }
+    td.res-block.paid-yes { border:1px solid #0f5132; }
+    .table.table-sm td, .table.table-sm th {
+      font-size: 0.9rem;
+    }
 
     /* Notes wrap without collapsing layout */
     td.notes-col, th.notes-col {
@@ -40,19 +48,18 @@
       <a href="{{ url_for('dashboard', year=year, month=month) }}" class="btn btn-secondary">Back</a>
     </div>
 
-    <!-- Range export controls -->
     <form class="d-flex align-items-center gap-2" method="get" action="{{ url_for('export_reservations') }}">
       <input type="hidden" name="scope" value="range">
-      <label>From</label>
-      <input type="month" name="from" class="form-control" style="width: 170px" required>
-      <label>To</label>
-      <input type="month" name="to" class="form-control" style="width: 170px" required>
+      <label class="mb-0">From</label>
+      <input type="month" name="from" class="form-control" style="width: 170px" value="{{ form_from_value }}" required>
+      <label class="mb-0">To</label>
+      <input type="month" name="to" class="form-control" style="width: 170px" value="{{ form_to_value }}" required>
       <button class="btn btn-outline-primary">Export Range</button>
     </form>
   </div>
 
   {% for section in sections %}
-    <h4 class="month-title">Reservations – {{ section.year }}-{{ "%02d"|format(section.month) }}</h4>
+    <h4 class="month-title">Reservations – {{ section.month_label }} {{ section.year }}</h4>
 
     <div class="table-responsive">
       <table class="export-grid">
@@ -62,13 +69,15 @@
             <th>{{ d.day }}</th>
           {% endfor %}
         </tr>
-        {% for s in sites|reverse%}
+        {% for s in sites %}
         <tr>
-          <td class="fw-bold">Site {{ s[0] }}</td>
+          <td class="fw-bold" title="{{ s[1] }}">{{ site_short_lookup[s[0]] }}</td>
           {% for cell in section.grid[s[0]] %}
             {% if cell.type == 'res' %}
-              <td class="res-block" colspan="{{ cell.span }}">
-                {{ cell.res.guest }}
+              {% set status = (cell.res.status or '').lower() %}
+              {% set paid = (cell.res.paid or 'no').lower() %}
+              <td class="res-block status-{{ status if status else 'unknown' }} paid-{{ 'yes' if paid == 'yes' else 'no' }}" colspan="{{ cell.span }}">
+                {{ cell.res.guest.rsplit(' ', 1)[-1] }}{% if cell.res.site_locked %} [L]{% endif %}
               </td>
             {% else %}
               <td class="free"></td>
@@ -93,21 +102,35 @@
         <th>Adults</th>
         <th>Children</th>
         <th>Paid</th>
+        <th>Locked</th>
         <th class="notes-col">Notes</th>
       </tr>
-      {% for r in section.all_res_list|sort(attribute='site_id', reverse=True) %}
+      {% for r in section.all_res_list|sort(attribute='site_id') %}
       <tr>
-        <td>{{ r.site_id }}</td>
+        <td title="{{ site_lookup.get(r.site_id, 'Unknown') }}">{{ site_short_lookup.get(r.site_id, 'Unknown') }}</td>
         <td>{{ r.guest }}</td>
         <td>{{ r.phone }}</td>
         <td>{{ r.email }}</td>
         <td>{{ r.arrival }}</td>
         <td>{{ r.departure }}</td>
-        <td>{{ r.status }}</td>
+        <td>
+          {% if r.status %}
+            <span class="badge {{ 'bg-primary' if r.status.lower() == 'confirmed' else 'bg-warning text-dark' }}">{{ r.status|capitalize }}</span>
+          {% else %}
+            <span class="badge bg-secondary">N/A</span>
+          {% endif %}
+        </td>
         <td>{{ r.rv_size }}</td>
         <td>{{ r.num_adults or 0 }}</td>
         <td>{{ r.num_children or 0 }}</td>
-        <td>{{ r.paid }}</td>
+        <td>
+          {% if r.paid and r.paid.lower() == 'yes' %}
+            <span class="badge bg-success">Paid</span>
+          {% else %}
+            <span class="badge bg-danger">Unpaid</span>
+          {% endif %}
+        </td>
+        <td>{{ 'Yes' if r.site_locked else 'No' }}</td>
         <td class="notes-col">{{ r.notes }}</td>
       </tr>
       {% endfor %}

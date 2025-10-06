@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Availability for {{ year }}-{{ "%02d"|format(month) }}</h2>
+<h2>Availability for {{ month_name }} {{ year }}</h2>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
@@ -11,8 +11,12 @@
     {% endif %}
     <a class="btn btn-outline-secondary" href="?year={{ year if month<12 else year+1 }}&month={{ month+1 if month<12 else 1 }}">Next &gt;</a>
   </div>
-  <form method="get" class="d-flex ms-3">
-    <input type="month" class="form-control" name="jump" onchange="if(this.value) jumpToMonth(this.value)">
+  <form method="get" class="d-flex align-items-center ms-3 gap-2">
+    <input type="month"
+           class="form-control"
+           name="jump"
+           value="{{ '%04d-%02d'|format(year, month) }}"
+           onchange="if(this.value) jumpToMonth(this.value)">
   </form>
 </div>
 
@@ -24,20 +28,27 @@
       <th>{{ d.day }}</th>
     {% endfor %}
   </tr>
-  {% for s in sites %}
+  {% for group in group_rows %}
   <tr>
-    <td class="fw-bold">{{ s[1] }}</td>
-    {% for cell in grid[s[0]] %}
-      {% if cell == 'booked' %}
-        <td class="booked"></td>
+    <td class="fw-bold">{{ group.name }}</td>
+    {% for cell in group.cells %}
+      {% set state = cell.state %}
+      {% if state == 'confirmed' %}
+        <td class="status-confirmed"></td>
+      {% elif state == 'tentative' %}
+        <td class="status-tentative"></td>
       {% else %}
-        <td class="free"></td>
+        <td class="free" title="Max contiguous nights: {{ cell.max_run }}, available sites: {{ cell.free_sites }}">
+          <span class="avail-hint">{{ cell.free_sites }} / {{ cell.max_run }}d</span>
+        </td>
       {% endif %}
     {% endfor %}
   </tr>
   {% endfor %}
 </table>
 </div>
+
+<p class="text-muted" style="font-size:12px;">For available days, the number indicates free sites and the maximum consecutive nights that can be booked without moving (e.g., <strong>2 / 3d</strong> = two sites available, up to three nights).</p>
 
 <script>
 function jumpToMonth(val){
@@ -52,8 +63,17 @@ function jumpToMonth(val){
 .free {
   background: #28a745 !important;   /* Bootstrap green */
 }
-.booked {
+.status-confirmed {
   background: #dc3545 !important;   /* Bootstrap red */
+}
+.status-tentative {
+  background: #ffc107 !important;   /* Bootstrap yellow */
+}
+.avail-hint {
+  display: inline-block;
+  font-size: 10px;
+  color: #0f5132;
+  font-weight: 600;
 }
 </style>
 {% endblock %}

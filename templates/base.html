@@ -29,6 +29,71 @@
         max-width: 100%;
         font-size: inherit;
     }
+    td.res-block.status-confirmed {
+        background: #cfe2ff !important;
+    }
+    td.res-block.status-tentative {
+        background: #fff3cd !important;
+    }
+    td.res-block.paid-no {
+        border: 2px dashed #dc3545;
+    }
+    td.res-block .guest-label {
+        font-weight: 600;
+        font-size: 14px;
+    }
+    td.res-block .res-tags {
+        display: flex;
+        gap: 4px;
+        justify-content: center;
+        margin-top: 2px;
+        font-size: 11px;
+    }
+    td.res-block.short-cell .res-tags {
+        justify-content: center;
+    }
+    td.res-block .tag {
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(0,0,0,0.08);
+    }
+    td.res-block.short-cell .tag {
+        padding: 1px 4px;
+        font-size: 10px;
+    }
+    td.res-block.short-cell .res-tags {
+        flex-direction: column;
+    }
+    td.res-block.short-cell .compact-tag {
+        letter-spacing: 0.5px;
+        border-radius: 6px;
+        padding: 2px 4px;
+        display: inline-block;
+    }
+    td.res-block.short-cell .compact-tag.tag-cu {
+        background: #ffe69c;
+        color: #856404;
+    }
+    td.res-block.short-cell .compact-tag.tag-cp {
+        background: #d1e7dd;
+        color: #0f5132;
+    }
+    td.res-block.status-tentative .status-tag {
+        background: #ffe69c;
+        color: #856404;
+    }
+    td.res-block.status-confirmed .status-tag {
+        background: #b6d4fe;
+        color: #084298;
+    }
+    td.res-block.paid-yes .paid-tag {
+        background: #d1e7dd;
+        color: #0f5132;
+    }
+    td.res-block.paid-no .paid-tag {
+        background: #f8d7da;
+        color: #842029;
+    }
     .drag-hover {
         background-color: rgba(0, 123, 255, 0.3) !important; /* blue preview */
     }
