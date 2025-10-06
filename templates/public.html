@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Check Availability</h2>
+<form class="row g-2 mb-3">
+  <div class="col-auto"><input type="date" class="form-control" name="start" value="{{ start }}"></div>
+  <div class="col-auto"><input type="date" class="form-control" name="end" value="{{ end }}"></div>
+  <div class="col-auto"><button type="submit" class="btn btn-primary">Check</button></div>
+</form>
+{% if sites %}
+<table class="table table-bordered">
+<tr><th>Site</th><th>Status</th></tr>
+{% for s in sites %}
+<tr>
+  <td>{{ s.name }}</td>
+  <td>{% if s.available %}<span class="badge bg-success">Available</span>{% else %}<span class="badge bg-secondary">Booked</span>{% endif %}</td>
+</tr>
+{% endfor %}
+</table>
+{% endif %}
+{% endblock %}

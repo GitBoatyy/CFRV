@@ -1,0 +1,492 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Reservations for {{ year }}-{{ "%02d" % month }}</h2>
+
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+  <!-- Month navigator -->
+  <div class="btn-group me-2" role="group" aria-label="Month navigation">
+    <button id="prevBtn" type="button" class="btn btn-outline-secondary" onclick="goPrev()">‹ Prev</button>
+    <button type="button" class="btn btn-outline-secondary" onclick="goNext()">Next ›</button>
+  </div>
+
+  <input type="month"
+         class="form-control"
+         style="max-width: 220px;"
+         id="jumpMonth"
+         value="{{ '%04d-%02d' % (year, month) }}"
+         onchange="jumpToMonth(this.value)">
+
+  <button class="btn btn-primary ms-2" onclick="newRes()">Add Reservation</button>
+  <button id="editToggleBtn" onclick="toggleEditMode()" class="btn btn-warning">Toggle Edit Mode</button>
+  <button id="optimizeBtn" onclick="optimizeSites()" class="btn btn-outline-primary">Optimize Layout</button>
+  <a href="{{ url_for('export_reservations', scope='month', year=year, month=month) }}" class="btn btn-success">Export Current Month</a>
+  <a href="{{ url_for('export_reservations', scope='all') }}" class="btn btn-secondary">Export All Reservations</a>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-bordered table-sm align-middle" style="table-layout:fixed;width:100%;">
+    <colgroup>
+      <col style="width: 90px;">
+      {% for d in days %}<col>{% endfor %}
+    </colgroup>
+    <thead>
+      <tr>
+        <th>Site</th>
+        {% for d in days %}<th>{{ d.day }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sites %}
+      <tr data-siteid="{{ s[0] }}">
+        <td class="fw-bold text-start px-2">{{ s[1] }}</td>
+        {% set day_ns = namespace(day=1) %}
+        {% for cell in grid[s[0]] %}
+          {% if cell.type == 'res' %}
+            <td class="res-block"
+                colspan="{{ cell.span }}"
+                draggable="false"
+                data-day="{{ day_ns.day }}"
+                data-span="{{ cell.span }}"
+                data-res-id="{{ cell.res.id }}"
+                data-res='{{ cell.res|tojson|escape }}'
+                onclick="showRes(JSON.parse(this.getAttribute('data-res')))">
+              {{ cell.res.guest.rsplit(" ", 1)[-1] }}
+            </td>
+            {% set day_ns.day = day_ns.day + cell.span %}
+          {% else %}
+            <td class="free"
+                data-day="{{ day_ns.day }}"
+                data-span="1"></td>
+            {% set day_ns.day = day_ns.day + 1 %}
+          {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="resModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Reservation</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="resContent"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== Month navigation ===== */
+const current = new Date();
+const curY = current.getFullYear();
+const curM = current.getMonth() + 1;
+
+const pageY = {{ year|int }};
+const pageM = {{ month|int }};
+
+function ymToQuery(y, m) { return `?year=${y}&month=${m}`; }
+function goTo(y, m) {
+  if (m < 1) { y -= 1; m = 12; }
+  if (m > 12) { y += 1; m = 1; }
+  if (y < curY || (y === curY && m < curM)) return;
+  window.location = ymToQuery(y, m);
+}
+function goPrev() {
+  let y = pageY, m = pageM - 1;
+  if (m < 1) { m = 12; y = pageY - 1; }
+  if (y < curY || (y === curY && m < curM)) return;
+  goTo(y, m);
+}
+function goNext() {
+  let y = pageY, m = pageM + 1;
+  if (m > 12) { m = 1; y = pageY + 1; }
+  goTo(y, m);
+}
+function jumpToMonth(val){
+  const [y,m] = val.split('-').map(v => parseInt(v, 10));
+  goTo(y, m);
+}
+window.addEventListener('DOMContentLoaded', () => {
+  const prevBtn = document.getElementById('prevBtn');
+  if ((pageY < curY) || (pageY === curY && pageM <= curM)) prevBtn.disabled = true;
+});
+
+/* ===== Existing dashboard logic ===== */
+let currentRes = null;
+let editMode = false;
+
+function toggleEditMode(){
+  editMode = !editMode;
+  localStorage.setItem("editMode", editMode ? "1" : "0");
+  const btn = document.getElementById("editToggleBtn");
+  if(editMode){
+    btn.classList.remove("btn-warning"); btn.classList.add("btn-danger");
+    btn.innerText = "Edit Mode ON";
+  } else {
+    btn.classList.remove("btn-danger"); btn.classList.add("btn-warning");
+    btn.innerText = "Toggle Edit Mode";
+  }
+  document.querySelectorAll(".res-block").forEach(td=>{
+    td.setAttribute("draggable", editMode);
+    if(editMode){ td.addEventListener("dragstart", dragStart); }
+    else{ td.removeEventListener("dragstart", dragStart); }
+  });
+  document.querySelector("table").classList.toggle("edit-active", editMode);
+}
+
+let dragDuration = 0;
+let dropTargets = [];
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function getCellSpan(cell){
+  return parseInt(cell.getAttribute("data-span") || cell.colSpan || "1", 10);
+}
+
+function getCellDay(cell){
+  return parseInt(cell.getAttribute("data-day") || "0", 10);
+}
+
+function computeStartDay(cell, event){
+  const baseDay = getCellDay(cell);
+  if(!baseDay) return 0;
+  const span = getCellSpan(cell);
+  if(span <= 1 || !event){
+    return baseDay;
+  }
+  const rect = cell.getBoundingClientRect();
+  if(!rect.width) return baseDay;
+  const posX = Math.min(Math.max(event.clientX - rect.left, 0), rect.width);
+  const ratio = posX / rect.width;
+  const offset = Math.min(span - 1, Math.floor(ratio * span));
+  return baseDay + offset;
+}
+
+function cellsForRange(row, startDay, duration){
+  if(!row || !startDay || duration < 1) return [];
+  const endDay = startDay + duration - 1;
+  const dayCells = Array.from(row.querySelectorAll("td")).slice(1);
+  return dayCells.filter(td => {
+    const cStart = getCellDay(td);
+    if(!cStart) return false;
+    const cEnd = cStart + getCellSpan(td) - 1;
+    return !(endDay < cStart || startDay > cEnd);
+  });
+}
+
+function highlightRange(row, startDay){
+  clearHighlights();
+  cellsForRange(row, startDay, dragDuration).forEach(td => td.classList.add("drag-hover"));
+}
+
+function registerDropTargets(resId){
+  dropTargets = Array.from(document.querySelectorAll("tbody tr[data-siteid] td.free"));
+  const sameRes = Array.from(document.querySelectorAll(`tbody tr[data-siteid] td.res-block[data-res-id="${resId}"]`));
+  dropTargets.push(...sameRes);
+  dropTargets.forEach(cell => {
+    cell.addEventListener("dragover", dragOver);
+    cell.addEventListener("dragleave", dragLeave);
+    cell.addEventListener("drop", drop);
+  });
+}
+
+function dragEnd(){
+  dropTargets.forEach(cell => {
+    cell.removeEventListener("dragover", dragOver);
+    cell.removeEventListener("dragleave", dragLeave);
+    cell.removeEventListener("drop", drop);
+  });
+  dropTargets = [];
+  clearHighlights();
+}
+
+function dragStart(ev){
+  const cell = ev.target.closest("td");
+  if(!cell) return;
+  const res = JSON.parse(cell.getAttribute("data-res"));
+  ev.dataTransfer.setData("res", JSON.stringify(res));
+  ev.dataTransfer.effectAllowed = "move";
+
+  dragDuration = Math.max(1, Math.round((new Date(res.departure) - new Date(res.arrival)) / DAY_MS));
+  registerDropTargets(String(res.id));
+  ev.target.addEventListener("dragend", dragEnd, { once: true });
+}
+
+function dragOver(ev){
+  ev.preventDefault();
+  const cell = ev.target.closest("td");
+  const row = cell ? cell.closest("tr") : null;
+  if(!cell || !row) return;
+  const startDay = computeStartDay(cell, ev);
+  if(!startDay) return;
+  highlightRange(row, startDay);
+}
+
+function dragLeave(ev){
+  const current = ev.currentTarget;
+  const related = ev.relatedTarget;
+  if(related && current && current.contains(related)) return;
+  clearHighlights();
+}
+
+function clearHighlights(){
+  document.querySelectorAll(".drag-hover").forEach(c => c.classList.remove("drag-hover"));
+}
+
+async function drop(ev){
+  ev.preventDefault();
+  const cell = ev.target.closest("td");
+  const row = cell ? cell.closest("tr") : null;
+  if(!cell || !row) return;
+
+  const res = JSON.parse(ev.dataTransfer.getData("res"));
+  const site_id = row.getAttribute("data-siteid");
+  const startDay = computeStartDay(cell, ev);
+  if(!startDay) return;
+
+  dragEnd();
+
+  const year = {{ year|int }};
+  const month = {{ month|int }};
+  const arrival = new Date(year, month-1, startDay);
+  const departure = new Date(year, month-1, startDay + dragDuration);
+
+  const fmt = d => d.toISOString().split('T')[0];
+  const data = { id: res.id, site_id: site_id, arrival: fmt(arrival), departure: fmt(departure) };
+
+  const resp = await fetch("/api/reservation/move",{
+    method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)
+  });
+  const out = await resp.json();
+  if(out.ok) location.reload();
+  else {
+    cell.classList.add("drag-invalid");
+    setTimeout(()=>cell.classList.remove("drag-invalid"), 1500);
+    alert(out.error);
+  }
+}
+
+async function optimizeSites(){
+  if(!confirm("Optimize site assignments to consolidate open spans?")) return;
+  const btn = document.getElementById("optimizeBtn");
+  const originalLabel = btn ? btn.innerText : "";
+  if(btn){ btn.disabled = true; btn.innerText = "Optimizing..."; }
+  try {
+    const resp = await fetch("/api/reservation/optimize", { method: "POST" });
+    const data = await resp.json();
+    if(!resp.ok || !data.ok){
+      const message = data && data.error ? data.error : "Optimization failed.";
+      alert(message);
+      if(btn){ btn.disabled = false; btn.innerText = originalLabel || "Optimize Layout"; }
+      return;
+    }
+    window.location.reload();
+  } catch(err){
+    alert(`Optimization failed: ${err.message}`);
+    if(btn){ btn.disabled = false; btn.innerText = originalLabel || "Optimize Layout"; }
+  }
+}
+
+function showRes(res){
+  currentRes = res;
+  renderRes(res);
+  let modal = new bootstrap.Modal(document.getElementById('resModal'));
+  modal.show();
+}
+
+function renderRes(res){
+  const html = `
+    <div class="row g-2 mb-2">
+      <div class="col text-end">
+        <a href="#" onclick="editRes()">Edit</a>
+        &nbsp;|&nbsp;
+        <a href="#" class="text-danger" onclick="deleteRes(${res.id})">Delete</a>
+      </div>
+    </div>
+    <div class="row"><div class="col-4 fw-semibold">Guest:</div><div class="col-8">${res.guest}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Phone:</div><div class="col-8">${res.phone||''}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Email:</div><div class="col-8">${res.email||''}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Arrival:</div><div class="col-8">${res.arrival}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Departure:</div><div class="col-8">${res.departure}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Status:</div><div class="col-8">${res.status}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">RV Size:</div><div class="col-8">${res.rv_size||''}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Adults / Children:</div><div class="col-8">${res.num_adults||0} / ${res.num_children||0}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Paid:</div><div class="col-8">${res.paid||'no'}</div></div>
+    <div class="row"><div class="col-4 fw-semibold">Notes:</div><div class="col-8">${res.notes||''}</div></div>`;
+  document.getElementById("resContent").innerHTML = html;
+}
+
+function editRes(){
+  const r = currentRes;
+  const html = `
+    <form onsubmit="return saveRes(event)">
+      <div class="row g-2">
+        <div class="col-4"><label class="form-label">Guest</label></div>
+        <div class="col-8"><input class="form-control" name="guest" value="${r.guest||''}" required></div>
+
+        <div class="col-4"><label class="form-label">Phone</label></div>
+        <div class="col-8"><input class="form-control" name="phone" value="${r.phone||''}"></div>
+
+        <div class="col-4"><label class="form-label">Email</label></div>
+        <div class="col-8"><input class="form-control" name="email" value="${r.email||''}"></div>
+
+        <div class="col-4"><label class="form-label">Arrival</label></div>
+        <div class="col-8"><input type="date" class="form-control" name="arrival" value="${r.arrival}" required></div>
+
+        <div class="col-4"><label class="form-label">Departure</label></div>
+        <div class="col-8"><input type="date" class="form-control" name="departure" value="${r.departure}" required></div>
+
+        <div class="col-4"><label class="form-label">Site ID</label></div>
+        <div class="col-8"><input class="form-control" name="site_id" value="${r.site_id}"></div>
+
+        <div class="col-4"><label class="form-label">Status</label></div>
+        <div class="col-8">
+          <select class="form-select" name="status">
+            <option ${r.status=='tentative'?'selected':''}>tentative</option>
+            <option ${r.status=='confirmed'?'selected':''}>confirmed</option>
+          </select>
+        </div>
+
+        <div class="col-4"><label class="form-label">RV Size</label></div>
+        <div class="col-8"><input class="form-control" name="rv_size" value="${r.rv_size||''}" placeholder="e.g. 30ft"></div>
+
+        <div class="col-4"><label class="form-label">Adults</label></div>
+        <div class="col-8"><input type="number" class="form-control" name="num_adults" value="${r.num_adults||0}"></div>
+
+        <div class="col-4"><label class="form-label">Children</label></div>
+        <div class="col-8"><input type="number" class="form-control" name="num_children" value="${r.num_children||0}"></div>
+
+        <div class="col-4"><label class="form-label">Paid</label></div>
+        <div class="col-8">
+          <select class="form-select" name="paid">
+            <option value="no" ${r.paid=='no'?'selected':''}>No</option>
+            <option value="yes" ${r.paid=='yes'?'selected':''}>Yes</option>
+          </select>
+        </div>
+
+        <div class="col-4"><label class="form-label">Notes</label></div>
+        <div class="col-8"><textarea class="form-control" name="notes" rows="3">${r.notes||''}</textarea></div>
+      </div>
+
+      <button class="btn btn-primary w-100 mt-3">Save</button>
+    </form>`;
+  document.getElementById("resContent").innerHTML = html;
+}
+
+async function saveRes(e){
+  e.preventDefault();
+  const f = e.target;
+  const data = {
+    id: currentRes.id,
+    guest: f.guest.value,
+    phone: f.phone.value,
+    email: f.email.value,
+    arrival: f.arrival.value,
+    departure: f.departure.value,
+    site_id: f.site_id.value,
+    status: f.status.value,
+    rv_size: f.rv_size.value,
+    num_adults: f.num_adults.value,
+    num_children: f.num_children.value,
+    paid: f.paid.value,
+    notes: f.notes.value
+  };
+  const resp = await fetch("/api/reservation/update",{
+    method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)
+  });
+  const out = await resp.json();
+  if(out.ok) location.reload(); else alert(out.error);
+}
+
+function newRes(){
+  const modal = new bootstrap.Modal(document.getElementById('resModal'));
+  document.getElementById("resContent").innerHTML = `
+    <form onsubmit="return saveNewRes(event)">
+      <div class="row g-2">
+        <div class="col-4"><label class="form-label">Guest</label></div>
+        <div class="col-8"><input class="form-control" name="guest" placeholder="Guest Name" required></div>
+
+        <div class="col-4"><label class="form-label">Phone</label></div>
+        <div class="col-8"><input class="form-control" name="phone" placeholder="Phone"></div>
+
+        <div class="col-4"><label class="form-label">Email</label></div>
+        <div class="col-8"><input class="form-control" name="email" placeholder="Email"></div>
+
+        <div class="col-4"><label class="form-label">Arrival</label></div>
+        <div class="col-8"><input type="date" class="form-control" name="arrival" required></div>
+
+        <div class="col-4"><label class="form-label">Departure</label></div>
+        <div class="col-8"><input type="date" class="form-control" name="departure" required></div>
+
+        <div class="col-4"><label class="form-label">Site</label></div>
+        <div class="col-8">
+          <select class="form-select" name="site_id" required>
+            {% for s in sites %}<option value="{{s[0]}}">{{s[1]}}</option>{% endfor %}
+          </select>
+        </div>
+
+        <div class="col-4"><label class="form-label">Status</label></div>
+        <div class="col-8">
+          <select class="form-select" name="status">
+            <option>tentative</option><option>confirmed</option>
+          </select>
+        </div>
+
+        <div class="col-4"><label class="form-label">RV Size</label></div>
+        <div class="col-8"><input class="form-control" name="rv_size" placeholder="e.g. 30ft"></div>
+
+        <div class="col-4"><label class="form-label">Adults</label></div>
+        <div class="col-8"><input type="number" class="form-control" name="num_adults" value="0"></div>
+
+        <div class="col-4"><label class="form-label">Children</label></div>
+        <div class="col-8"><input type="number" class="form-control" name="num_children" value="0"></div>
+
+        <div class="col-4"><label class="form-label">Paid</label></div>
+        <div class="col-8">
+          <select class="form-select" name="paid"><option value="no">No</option><option value="yes">Yes</option></select>
+        </div>
+
+        <div class="col-4"><label class="form-label">Notes</label></div>
+        <div class="col-8"><textarea class="form-control" name="notes" rows="3"></textarea></div>
+      </div>
+      <button class="btn btn-success w-100 mt-3">Add</button>
+    </form>`;
+  modal.show();
+}
+
+async function saveNewRes(e){
+  e.preventDefault();
+  const f = e.target;
+  const data = {
+    guest: f.guest.value, phone: f.phone.value, email: f.email.value,
+    arrival: f.arrival.value, departure: f.departure.value,
+    site_id: f.site_id.value, status: f.status.value,
+    rv_size: f.rv_size.value, num_adults: f.num_adults.value,
+    num_children: f.num_children.value, paid: f.paid.value, notes: f.notes.value
+  };
+  const resp = await fetch("/api/reservation/add",{
+    method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)
+  });
+  const out = await resp.json();
+  if(out.ok) location.reload(); else alert(out.error);
+}
+
+async function deleteRes(id){
+  if(!confirm("Delete this reservation?")) return;
+  const resp = await fetch("/api/reservation/delete",{
+    method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify({id})
+  });
+  const out = await resp.json();
+  if(out.ok) location.reload(); else alert(out.error);
+}
+
+window.addEventListener("DOMContentLoaded", ()=>{
+  if(localStorage.getItem("editMode")==="1"){ editMode = false; toggleEditMode(); }
+});
+</script>
+
+{% endblock %}

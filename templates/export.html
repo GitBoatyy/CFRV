@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Export Reservations</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #fff; }
+    .no-print { margin-bottom: 20px; }
+    @media print { .no-print { display:none; } }
+
+    .export-grid { table-layout: fixed; width: 100%; border-collapse: collapse; }
+    .export-grid th, .export-grid td {
+      border: 1px solid #dee2e6; text-align: center; padding: 2px;
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    }
+    .export-grid th:first-child, .export-grid td:first-child { width: 80px; }
+    .export-grid th:not(:first-child), .export-grid td:not(:first-child) { width: 28px; }
+
+    td.free { background:#d4edda; height:32px; }
+    td.res-block { background:#cce5ff !important; color:#000; border:1px solid #495057; vertical-align:middle; }
+
+    /* Notes wrap without collapsing layout */
+    td.notes-col, th.notes-col {
+      max-width: 240px;
+      white-space: normal;
+      word-wrap: break-word;
+      word-break: break-word;
+    }
+
+    .month-title { margin: 12px 0; }
+    .page-break { page-break-after: always; }
+  </style>
+</head>
+<body>
+<div class="container-fluid">
+
+  <div class="no-print d-flex justify-content-between align-items-center">
+    <div class="d-flex gap-2">
+      <button class="btn btn-primary" onclick="window.print()">Print</button>
+      <a href="{{ url_for('dashboard', year=year, month=month) }}" class="btn btn-secondary">Back</a>
+    </div>
+
+    <!-- Range export controls -->
+    <form class="d-flex align-items-center gap-2" method="get" action="{{ url_for('export_reservations') }}">
+      <input type="hidden" name="scope" value="range">
+      <label>From</label>
+      <input type="month" name="from" class="form-control" style="width: 170px" required>
+      <label>To</label>
+      <input type="month" name="to" class="form-control" style="width: 170px" required>
+      <button class="btn btn-outline-primary">Export Range</button>
+    </form>
+  </div>
+
+  {% for section in sections %}
+    <h4 class="month-title">Reservations – {{ section.year }}-{{ "%02d"|format(section.month) }}</h4>
+
+    <div class="table-responsive">
+      <table class="export-grid">
+        <tr>
+          <th>Site</th>
+          {% for d in section.days %}
+            <th>{{ d.day }}</th>
+          {% endfor %}
+        </tr>
+        {% for s in sites|reverse%}
+        <tr>
+          <td class="fw-bold">Site {{ s[0] }}</td>
+          {% for cell in section.grid[s[0]] %}
+            {% if cell.type == 'res' %}
+              <td class="res-block" colspan="{{ cell.span }}">
+                {{ cell.res.guest }}
+              </td>
+            {% else %}
+              <td class="free"></td>
+            {% endif %}
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+
+    <h5 class="mt-4">Reservation Details</h5>
+    <table class="table table-bordered table-sm">
+      <tr>
+        <th>Site</th>
+        <th>Guest</th>
+        <th>Phone</th>
+        <th>Email</th>
+        <th>Arrival</th>
+        <th>Departure</th>
+        <th>Status</th>
+        <th>RV Size</th>
+        <th>Adults</th>
+        <th>Children</th>
+        <th>Paid</th>
+        <th class="notes-col">Notes</th>
+      </tr>
+      {% for r in section.all_res_list|sort(attribute='site_id', reverse=True) %}
+      <tr>
+        <td>{{ r.site_id }}</td>
+        <td>{{ r.guest }}</td>
+        <td>{{ r.phone }}</td>
+        <td>{{ r.email }}</td>
+        <td>{{ r.arrival }}</td>
+        <td>{{ r.departure }}</td>
+        <td>{{ r.status }}</td>
+        <td>{{ r.rv_size }}</td>
+        <td>{{ r.num_adults or 0 }}</td>
+        <td>{{ r.num_children or 0 }}</td>
+        <td>{{ r.paid }}</td>
+        <td class="notes-col">{{ r.notes }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+
+    {% if not loop.last %}<div class="page-break"></div>{% endif %}
+  {% endfor %}
+
+</div>
+</body>
+</html>
